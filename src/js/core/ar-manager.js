@@ -44,6 +44,9 @@ class ARManager {
         // Check camera permissions
         this.checkCameraPermissions();
         
+        // Start layout monitoring
+        this.startLayoutMonitoring();
+        
         console.log('✅ ARManager: Configurado com sucesso');
     }
     
@@ -145,10 +148,43 @@ class ARManager {
             }
         } else {
             console.warn('⚠️ ARManager: Elemento de vídeo não encontrado');
+            
+            // Try to find video element with different selectors
+            const videoAlternatives = [
+                'video',
+                'a-scene video',
+                'canvas + video',
+                '[src*="blob:"]'
+            ];
+            
+            let foundVideo = false;
+            for (const selector of videoAlternatives) {
+                const altVideo = document.querySelector(selector);
+                if (altVideo && altVideo.tagName === 'VIDEO') {
+                    console.log(`✅ ARManager: Vídeo encontrado com seletor alternativo: ${selector}`);
+                    foundVideo = true;
+                    
+                    setTimeout(() => {
+                        this.attemptZoomControl();
+                    }, 2000);
+                    break;
+                }
+            }
+            
+            if (!foundVideo) {
+                // Keep trying to find video element
+                console.log('🔍 ARManager: Tentando encontrar vídeo novamente em 3s...');
+                setTimeout(() => {
+                    this.checkARStatus();
+                }, 3000);
+            }
         }
         
         // Force hide loading screen if still visible
         this.hideLoadingScreen();
+        
+        // Force full screen layout
+        this.forceFullScreenLayout();
         
         // Show debug message
         this.updateDebugInfo('AR inicializado - aponte para marcador HIRO', 'info');
@@ -901,6 +937,72 @@ class ARManager {
         } catch (error) {
             console.error('❌ ARManager: Erro ao tentar câmera alternativa:', error);
         }
+    }
+    
+    // Force full screen layout regardless of zoom
+    forceFullScreenLayout() {
+        console.log('📺 ARManager: Forçando layout full screen...');
+        
+        // Force canvas to fill screen
+        const canvas = document.querySelector('canvas.a-canvas');
+        if (canvas) {
+            canvas.style.position = 'fixed';
+            canvas.style.top = '0';
+            canvas.style.left = '0';
+            canvas.style.width = '100vw';
+            canvas.style.height = '100vh';
+            canvas.style.objectFit = 'cover';
+            canvas.style.zIndex = '1';
+            console.log('✅ ARManager: Canvas forçado para full screen');
+        }
+        
+        // Force video to fill screen
+        const video = document.querySelector('video');
+        if (video) {
+            video.style.position = 'fixed';
+            video.style.top = '0';
+            video.style.left = '0';
+            video.style.width = '100vw';
+            video.style.height = '100vh';
+            video.style.objectFit = 'cover';
+            video.style.zIndex = '0';
+            console.log('✅ ARManager: Vídeo forçado para full screen');
+        }
+        
+        // Force A-Frame scene
+        const scene = document.querySelector('a-scene');
+        if (scene) {
+            scene.style.position = 'fixed';
+            scene.style.top = '0';
+            scene.style.left = '0';
+            scene.style.width = '100vw';
+            scene.style.height = '100vh';
+            scene.style.zIndex = '1';
+            console.log('✅ ARManager: A-Frame scene forçado para full screen');
+        }
+    }
+    
+    // Monitor layout to prevent shrinking
+    startLayoutMonitoring() {
+        console.log('👁️ ARManager: Iniciando monitoramento de layout...');
+        
+        setInterval(() => {
+            const canvas = document.querySelector('canvas.a-canvas');
+            const video = document.querySelector('video');
+            
+            if (canvas) {
+                const rect = canvas.getBoundingClientRect();
+                
+                // Check if canvas is smaller than expected (like 1/4 screen)
+                if (rect.width < window.innerWidth * 0.8 || rect.height < window.innerHeight * 0.8) {
+                    console.log('⚠️ ARManager: Layout reduzido detectado, corrigindo...');
+                    this.forceFullScreenLayout();
+                    
+                    // Show instruction to user
+                    this.showZoomInstruction('📺 Layout corrigido automaticamente', 'success');
+                }
+            }
+        }, 2000); // Check every 2 seconds
     }
     
     // Utility methods
