@@ -389,4 +389,19 @@ class NavigationManager {
             this.currentScreen = screenName;
         }
     }
-}\n\n// Initialize Navigation Manager\nlet navigationManager;\n\nif (document.readyState === 'loading') {\n    document.addEventListener('DOMContentLoaded', () => {\n        navigationManager = new NavigationManager();\n    });\n} else {\n    navigationManager = new NavigationManager();\n}\n\n// Export for use in other modules\nwindow.NavigationManager = NavigationManager;\nwindow.navigationManager = navigationManager;
+}
+
+// Initialize Navigation Manager
+let navigationManager;
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        navigationManager = new NavigationManager();
+    });
+} else {
+    navigationManager = new NavigationManager();
+}
+
+// Export for use in other modules
+window.NavigationManager = NavigationManager;
+window.navigationManager = navigationManager;

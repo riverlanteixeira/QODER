@@ -315,20 +315,29 @@ class ARManager {
             // Filter only back cameras first
             const backCameras = videoDevices.filter(device => {
                 const label = device.label.toLowerCase();
-                return !label.includes('front') && 
-                       !label.includes('selfie') &&
-                       !label.includes('user') &&
-                       device.label.trim() !== ''; // Ensure we have a label
+                // More flexible filtering - exclude only obvious front cameras
+                const isFrontCamera = label.includes('front') || 
+                                    label.includes('selfie') ||
+                                    label.includes('user') ||
+                                    label.includes('face');
+                
+                // Include cameras without specific labels as potential back cameras
+                const hasValidLabel = device.label && device.label.trim() !== '' && !label.includes('camera 0');
+                
+                // For Samsung S20 FE specifically, include even unnamed cameras
+                const isPotentialBackCamera = !isFrontCamera;
+                
+                return isPotentialBackCamera;
             });
             
-            console.log('📱 ARManager: Câmeras traseiras encontradas:', backCameras.length);
+            console.log('📱 ARManager: Câmeras candidatas (incluindo sem rótulo):', backCameras.length);
             backCameras.forEach((device, index) => {
-                console.log(`📷 Câmera traseira ${index}:`, device.label);
+                const displayLabel = device.label || `Câmera ${index} (sem rótulo)`;
+                console.log(`📷 Câmera candidata ${index}:`, displayLabel);
             });
             
-            // Strategy 1: Enhanced Samsung S20 FE detection
-            // Look for specific patterns that indicate telephoto vs wide
-            if (backCameras.length >= 2) {
+            // Strategy 1: Enhanced Samsung S20 FE detection with flexible scoring
+            if (videoDevices.length >= 1) {
                 // Try to identify telephoto cameras more aggressively
                 const telephotoIndicators = [
                     'telephoto', 'tele', 'zoom', 'periscope',
@@ -341,14 +350,14 @@ class ARManager {
                 
                 // Score each camera based on likelihood of being the main wide camera
                 const cameraScores = backCameras.map((device, index) => {
-                    const label = device.label.toLowerCase();
+                    const label = device.label ? device.label.toLowerCase() : '';
                     let score = 100; // Base score
                     
                     // Penalize telephoto indicators heavily
                     telephotoIndicators.forEach(indicator => {
                         if (label.includes(indicator)) {
                             score -= 50;
-                            console.log(`⬇️ Penalizando ${device.label} por '${indicator}': -50 pontos`);
+                            console.log(`⬇️ Penalizando ${device.label || 'Câmera sem rótulo'} por '${indicator}': -50 pontos`);
                         }
                     });
                     
@@ -356,7 +365,7 @@ class ARManager {
                     ultraWideIndicators.forEach(indicator => {
                         if (label.includes(indicator)) {
                             score -= 30;
-                            console.log(`⬇️ Penalizando ${device.label} por '${indicator}': -30 pontos`);
+                            console.log(`⬇️ Penalizando ${device.label || 'Câmera sem rótulo'} por '${indicator}': -30 pontos`);
                         }
                     });
                     
@@ -364,19 +373,29 @@ class ARManager {
                     if (label.includes('main') || label.includes('wide') || 
                         label.includes('primary') || label.includes('principal')) {
                         score += 20;
-                        console.log(`⬆️ Bonificando ${device.label} por palavra-chave principal: +20 pontos`);
+                        console.log(`⬆️ Bonificando ${device.label || 'Câmera sem rótulo'} por palavra-chave principal: +20 pontos`);
                     }
                     
-                    // Samsung S20 FE specific: First camera is often wide
-                    if (index === 0 && backCameras.length >= 3) {
-                        score += 15;
-                        console.log(`⬆️ Bonificando ${device.label} por ser primeira câmera: +15 pontos`);
+                    // For cameras without labels, give slight preference to first ones
+                    if (!device.label || device.label.trim() === '' || device.label.toLowerCase().includes('camera')) {
+                        if (index === 0) {
+                            score += 10;
+                            console.log(`⬆️ Bonificando câmera sem rótulo (posição 0): +10 pontos`);
+                        }
                     }
                     
-                    // Avoid last camera (often telephoto)
-                    if (index === backCameras.length - 1 && backCameras.length >= 3) {
-                        score -= 25;
-                        console.log(`⬇️ Penalizando ${device.label} por ser última câmera: -25 pontos`);
+                    // Samsung S20 FE specific: First camera often wide, last often telephoto
+                    if (backCameras.length >= 2) {
+                        if (index === 0) {
+                            score += 15;
+                            console.log(`⬆️ Bonificando primeira câmera: +15 pontos`);
+                        }
+                        
+                        // Avoid last camera (often telephoto) only if we have multiple options
+                        if (index === backCameras.length - 1 && backCameras.length >= 3) {
+                            score -= 25;
+                            console.log(`⬇️ Penalizando última câmera: -25 pontos`);
+                        }
                     }
                     
                     return { device, score, index };
@@ -387,15 +406,17 @@ class ARManager {
                 
                 console.log('📊 ARManager: Pontuação das câmeras:');
                 cameraScores.forEach(({ device, score, index }) => {
-                    console.log(`📷 ${device.label}: ${score} pontos`);
+                    const displayLabel = device.label || `Câmera ${index} (sem rótulo)`;
+                    console.log(`📷 ${displayLabel}: ${score} pontos`);
                 });
                 
                 // Select camera with highest score
                 if (cameraScores[0] && cameraScores[0].score > 0) {
                     selectedDeviceId = cameraScores[0].device.deviceId;
                     selectedStrategy = 'enhanced-scoring';
+                    const displayLabel = cameraScores[0].device.label || `Câmera ${cameraScores[0].index} (sem rótulo)`;
                     console.log('🎯 ARManager: Câmera selecionada por pontuação:', 
-                               cameraScores[0].device.label, 
+                               displayLabel, 
                                '(', cameraScores[0].score, 'pontos)');
                 }
             }
@@ -420,11 +441,18 @@ class ARManager {
                 }
             }
             
-            // Strategy 3: Force use first back camera if nothing else works
-            if (!selectedDeviceId && backCameras.length > 0) {
-                selectedDeviceId = backCameras[0].deviceId;
-                selectedStrategy = 'force-first-back';
-                console.log('🎯 ARManager: Forçando primeira câmera traseira:', backCameras[0].label);
+            // Strategy 3: Force use first available camera if nothing else works
+            if (!selectedDeviceId && videoDevices.length > 0) {
+                // Try any camera that's not obviously front-facing
+                const anyBackCamera = videoDevices.find(device => {
+                    const label = device.label.toLowerCase();
+                    return !label.includes('front') && !label.includes('selfie');
+                }) || videoDevices[0]; // Use first camera as last resort
+                
+                selectedDeviceId = anyBackCamera.deviceId;
+                selectedStrategy = 'fallback-any-camera';
+                console.log('🎯 ARManager: Usando fallback - qualquer câmera disponível:', 
+                           anyBackCamera.label || 'Câmera sem rótulo');
             }
             
             // Build constraints with aggressive camera forcing
