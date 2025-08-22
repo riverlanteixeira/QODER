@@ -58,11 +58,6 @@ class ARManager {
         this.scene.addEventListener('arjs-ready', () => {
             console.log('🎯 ARManager: AR.js pronto');
             this.isARReady = true;
-            
-            // Try to control zoom after AR.js initializes
-            setTimeout(() => {
-                this.attemptZoomControl();
-            }, 1000);
         });
         
         // Camera ready
@@ -141,6 +136,13 @@ class ARManager {
                 videoHeight: video.videoHeight,
                 readyState: video.readyState
             });
+            
+            // Try to control zoom when video is ready
+            if (video.readyState >= 2) {
+                setTimeout(() => {
+                    this.attemptZoomControl();
+                }, 1000);
+            }
         } else {
             console.warn('⚠️ ARManager: Elemento de vídeo não encontrado');
         }
@@ -496,18 +498,12 @@ class ARManager {
                            anyBackCamera.label || 'Câmera sem rótulo');
             }
             
-            // Build constraints with aggressive camera forcing and zoom control
+            // Build constraints with simplified camera forcing
             const constraints = {
                 video: {
-                    width: { ideal: 640, min: 480, max: 1280 },
-                    height: { ideal: 480, min: 360, max: 720 },
-                    facingMode: 'environment',
-                    // Zoom and focus controls to prevent telephoto behavior
-                    zoom: { ideal: 1.0, min: 1.0, max: 1.0 }, // Force minimum zoom
-                    focusMode: { ideal: 'continuous' },
-                    // Field of view controls
-                    aspectRatio: { ideal: 4/3 },
-                    frameRate: { ideal: 30, max: 30 }
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: 'environment'
                 }
             };
             
@@ -712,52 +708,118 @@ class ARManager {
     attemptZoomControl() {
         console.log('🔍 ARManager: Tentando controlar zoom da câmera...');
         
-        // Try to find video element created by AR.js
-        const video = document.querySelector('video');
-        if (video && video.srcObject) {
-            const stream = video.srcObject;
-            const videoTrack = stream.getVideoTracks()[0];
+        // Multiple attempts to find and control camera
+        let attempt = 0;
+        const maxAttempts = 5;
+        
+        const controlZoom = () => {
+            attempt++;
+            console.log(`🔄 ARManager: Tentativa ${attempt}/${maxAttempts} de controlar zoom`);
             
-            if (videoTrack) {
-                const capabilities = videoTrack.getCapabilities();
-                const settings = videoTrack.getSettings();
+            // Try to find video element created by AR.js
+            const video = document.querySelector('video');
+            
+            if (video && video.srcObject) {
+                const stream = video.srcObject;
+                const videoTrack = stream.getVideoTracks()[0];
                 
-                console.log('📹 ARManager: Settings atuais:', {
-                    zoom: settings.zoom,
-                    width: settings.width,
-                    height: settings.height
-                });
-                
-                if (capabilities && capabilities.zoom) {
-                    console.log('🔍 ARManager: Zoom capabilities:', capabilities.zoom);
+                if (videoTrack) {
+                    const capabilities = videoTrack.getCapabilities();
+                    const settings = videoTrack.getSettings();
                     
-                    // Try to set zoom to minimum
-                    const minZoom = capabilities.zoom.min;
-                    const constraints = {
-                        advanced: [{ zoom: minZoom }]
-                    };
-                    
-                    videoTrack.applyConstraints(constraints)
-                    .then(() => {
-                        console.log('✅ ARManager: Zoom resetado para mínimo:', minZoom);
-                        
-                        // Update debug info
-                        this.updateDebugInfo('Zoom da câmera resetado para mínimo', 'success');
-                    })
-                    .catch(error => {
-                        console.log('⚠️ ARManager: Falha ao resetar zoom:', error);
-                        
-                        // Show user instruction about manual zoom
-                        this.updateDebugInfo('Use dois dedos para ajustar zoom manualmente', 'warning');
+                    console.log('📹 ARManager: Settings atuais:', {
+                        zoom: settings.zoom,
+                        width: settings.width,
+                        height: settings.height,
+                        focusMode: settings.focusMode
                     });
-                } else {
-                    console.log('⚠️ ARManager: Zoom não suportado nesta câmera');
-                    this.updateDebugInfo('Use dois dedos na tela para ajustar zoom', 'info');
+                    
+                    if (capabilities) {
+                        console.log('🔧 ARManager: Capabilities:', capabilities);
+                        
+                        // Check if zoom is already at maximum (indicating telephoto issue)
+                        if (capabilities.zoom && settings.zoom) {
+                            const zoomRange = capabilities.zoom.max - capabilities.zoom.min;
+                            const currentZoomPercent = ((settings.zoom - capabilities.zoom.min) / zoomRange) * 100;
+                            
+                            console.log(`📊 ARManager: Zoom atual: ${settings.zoom} (${currentZoomPercent.toFixed(1)}% do máximo)`);
+                            
+                            if (currentZoomPercent > 50) {
+                                console.log('⚠️ ARManager: ZOOM ALTO DETECTADO! Tentando corrigir...');
+                                
+                                // Try to set zoom to minimum
+                                const minZoom = capabilities.zoom.min;
+                                const constraints = {
+                                    advanced: [{ zoom: minZoom }]
+                                };
+                                
+                                videoTrack.applyConstraints(constraints)
+                                .then(() => {
+                                    console.log('✅ ARManager: Zoom resetado para mínimo:', minZoom);
+                                    this.showZoomInstruction('✅ Zoom corrigido automaticamente!', 'success');
+                                })
+                                .catch(error => {
+                                    console.log('❌ ARManager: Falha ao resetar zoom:', error);
+                                    this.showZoomInstruction('📱 Use dois dedos para diminuir o zoom e detectar o marcador', 'warning');
+                                });
+                            } else {
+                                console.log('✅ ARManager: Zoom está em nível aceitável');
+                                this.showZoomInstruction('🎯 Aponte para o marcador HIRO para detectar o cubo', 'info');
+                            }
+                        } else {
+                            console.log('❓ ARManager: Zoom capabilities não disponíveis');
+                            this.showZoomInstruction('📱 Se elementos AR estão pequenos, use dois dedos para ajustar zoom', 'info');
+                        }
+                    }
+                    return; // Found video track, stop trying
                 }
             }
-        } else {
-            console.log('⚠️ ARManager: Vídeo element não encontrado');
+            
+            // Video not ready yet, try again
+            if (attempt < maxAttempts) {
+                console.log('⏳ ARManager: Vídeo não encontrado, tentando novamente em 1s...');
+                setTimeout(controlZoom, 1000);
+            } else {
+                console.log('❌ ARManager: Não foi possível encontrar vídeo element após múltiplas tentativas');
+                this.showZoomInstruction('📱 Use dois dedos na tela para ajustar zoom se necessário', 'warning');
+            }
+        };
+        
+        // Start first attempt
+        controlZoom();
+    }
+    
+    showZoomInstruction(message, type = 'info') {
+        // Remove any existing zoom instruction
+        const existing = document.querySelector('.zoom-instructions');
+        if (existing) {
+            existing.remove();
         }
+        
+        // Create new instruction
+        const instruction = document.createElement('div');
+        instruction.className = 'zoom-instructions';
+        instruction.textContent = message;
+        
+        // Add type-specific styling
+        if (type === 'success') {
+            instruction.style.background = 'rgba(16, 185, 129, 0.9)';
+        } else if (type === 'warning') {
+            instruction.style.background = 'rgba(245, 158, 11, 0.9)';
+        } else {
+            instruction.style.background = 'rgba(59, 130, 246, 0.9)';
+        }
+        
+        document.body.appendChild(instruction);
+        
+        // Remove after 5 seconds
+        setTimeout(() => {
+            if (instruction.parentNode) {
+                instruction.remove();
+            }
+        }, 5000);
+        
+        console.log(`📱 ARManager: Instrução mostrada - ${message}`);
     }
     
     // Utility methods
