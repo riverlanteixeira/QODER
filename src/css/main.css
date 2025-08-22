@@ -574,8 +574,9 @@ a-scene {
     left: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
-    z-index: 1 !important;
+    z-index: 0 !important;
     overflow: hidden !important;
+    background: transparent !important;
 }
 
 canvas.a-canvas {
@@ -587,10 +588,10 @@ canvas.a-canvas {
     width: 100vw !important;
     height: 100vh !important;
     height: 100dvh !important; /* Dynamic viewport height */
-    z-index: 1 !important;
+    z-index: 2 !important;
     object-fit: cover !important;
     object-position: center !important;
-    background: #000 !important; /* Fallback black background */
+    background: transparent !important; /* Transparent to show video behind */
 }
 
 /* Force video element to fill screen */
@@ -605,7 +606,7 @@ video {
     left: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
-    z-index: 0 !important;
+    z-index: 1 !important;
     background: #000 !important; /* Fallback black background */
 }
 

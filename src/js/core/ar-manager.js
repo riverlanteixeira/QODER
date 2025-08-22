@@ -983,8 +983,8 @@ class ARManager {
             canvas.style.maxHeight = '100vh';
             canvas.style.objectFit = 'cover';
             canvas.style.objectPosition = 'center';
-            canvas.style.zIndex = '1';
-            canvas.style.background = '#000';
+            canvas.style.zIndex = '2';
+            canvas.style.background = 'transparent'; // Transparent to show video
             
             // Force canvas dimensions directly
             if (canvas.width !== viewportWidth || canvas.height !== viewportHeight) {
@@ -1008,7 +1008,7 @@ class ARManager {
             video.style.maxHeight = '100vh';
             video.style.objectFit = 'cover';
             video.style.objectPosition = 'center';
-            video.style.zIndex = '0';
+            video.style.zIndex = '1'; // Behind canvas but visible
             video.style.background = '#000';
             console.log('✅ ARManager: Vídeo forçado para full screen');
         }
@@ -1025,8 +1025,9 @@ class ARManager {
             scene.style.height = '100vh';
             scene.style.maxWidth = '100vw';
             scene.style.maxHeight = '100vh';
-            scene.style.zIndex = '1';
+            scene.style.zIndex = '0'; // Behind video and canvas
             scene.style.overflow = 'hidden';
+            scene.style.background = 'transparent';
             console.log('✅ ARManager: A-Frame scene forçado para full screen');
         }
         
@@ -1037,6 +1038,39 @@ class ARManager {
         document.documentElement.style.margin = '0';
         document.documentElement.style.padding = '0';
         document.documentElement.style.overflow = 'hidden';
+        
+        // Ensure video is visible and playing
+        this.ensureVideoVisibility();
+    }
+    
+    // Ensure camera video is visible
+    ensureVideoVisibility() {
+        const video = document.querySelector('video');
+        if (video) {
+            // Check if video is actually showing content
+            if (video.videoWidth > 0 && video.videoHeight > 0) {
+                console.log('✅ ARManager: Vídeo da câmera está ativo:', {
+                    width: video.videoWidth,
+                    height: video.videoHeight,
+                    readyState: video.readyState
+                });
+                
+                // Make sure it's visible
+                video.style.visibility = 'visible';
+                video.style.opacity = '1';
+                video.style.display = 'block';
+            } else {
+                console.log('⚠️ ARManager: Vídeo da câmera sem conteúdo, tentando reativar...');
+                
+                // Try to restart video if it has no content
+                if (video.srcObject) {
+                    video.load();
+                    video.play().catch(e => console.log('Erro ao reproduzir vídeo:', e));
+                }
+            }
+        } else {
+            console.log('⚠️ ARManager: Elemento de vídeo não encontrado');
+        }
     }
     
     // Monitor layout to prevent shrinking
@@ -1074,12 +1108,25 @@ class ARManager {
                 }
             }
             
-            // Check video dimensions
+            // Check video dimensions and visibility
             if (video) {
                 const videoRect = video.getBoundingClientRect();
                 if (videoRect.width < window.innerWidth * 0.9 || 
                     videoRect.height < window.innerHeight * 0.9) {
                     needsCorrection = true;
+                }
+                
+                // Check if video has content but isn't visible
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                    if (video.style.visibility === 'hidden' || 
+                        video.style.opacity === '0' || 
+                        video.style.display === 'none') {
+                        console.log('🔧 ARManager: Vídeo com conteúdo mas não visível, corrigindo...');
+                        this.ensureVideoVisibility();
+                    }
+                } else if (video.srcObject) {
+                    console.log('⚠️ ARManager: Vídeo sem conteúdo mas com stream, verificando...');
+                    this.ensureVideoVisibility();
                 }
             }
             
