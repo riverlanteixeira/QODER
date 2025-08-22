@@ -173,21 +173,48 @@ class ARManager {
     }
     
     checkCameraPermissions() {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(stream => {
-                    console.log('✅ ARManager: Permissão de câmera concedida');
-                    // Stop the stream as we just needed to check permissions
-                    stream.getTracks().forEach(track => track.stop());
-                })
-                .catch(error => {
-                    console.warn('⚠️ ARManager: Erro ao acessar câmera:', error);
-                    this.showCameraButton();
-                });
-        } else {
+        console.log('📷 ARManager: Verificando permissões de câmera...');
+        
+        // Check if mediaDevices is supported
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             console.warn('⚠️ ARManager: getUserMedia não suportado');
             this.showCameraButton();
+            return;
         }
+        
+        // Check for camera permission
+        navigator.mediaDevices.getUserMedia({ 
+            video: {
+                facingMode: 'environment' // Use back camera for AR
+            }
+        })
+        .then(stream => {
+            console.log('✅ ARManager: Permissão de câmera concedida');
+            // Stop the stream as we just needed to check permissions
+            stream.getTracks().forEach(track => {
+                track.stop();
+                console.log(`📹 ARManager: Track ${track.kind} parado`);
+            });
+            
+            // Hide loading screen after camera check
+            setTimeout(() => {
+                this.hideLoadingScreen();
+            }, 1000);
+        })
+        .catch(error => {
+            console.warn('⚠️ ARManager: Erro ao acessar câmera:', error.name, error.message);
+            
+            if (error.name === 'NotAllowedError') {
+                console.log('🚫 ARManager: Permissão de câmera negada pelo usuário');
+                this.showCameraButton();
+            } else if (error.name === 'NotFoundError') {
+                console.log('📷 ARManager: Nenhuma câmera encontrada');
+                this.showCameraButton();
+            } else {
+                console.log('⚠️ ARManager: Erro desconhecido de câmera');
+                this.showCameraButton();
+            }
+        });
     }
     
     showCameraButton() {
@@ -201,19 +228,50 @@ class ARManager {
     }
     
     requestCameraPermission() {
+        console.log('📷 ARManager: Solicitando permissão de câmera...');
+        
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(stream => {
-                    console.log('✅ ARManager: Câmera ativada pelo usuário');
-                    stream.getTracks().forEach(track => track.stop());
-                    document.getElementById('enable-camera').style.display = 'none';
-                    // Reload the page to initialize AR properly
-                    location.reload();
-                })
-                .catch(error => {
-                    console.error('❌ ARManager: Erro ao ativar câmera:', error);
-                    alert('Para usar o jogo AR, é necessário permitir o acesso à câmera.');
+            navigator.mediaDevices.getUserMedia({ 
+                video: {
+                    facingMode: 'environment' // Prefer back camera
+                }
+            })
+            .then(stream => {
+                console.log('✅ ARManager: Câmera ativada pelo usuário');
+                stream.getTracks().forEach(track => {
+                    track.stop();
+                    console.log(`📹 ARManager: Track ${track.kind} parado após ativação`);
                 });
+                
+                // Hide camera button
+                const cameraBtn = document.getElementById('enable-camera');
+                if (cameraBtn) {
+                    cameraBtn.style.display = 'none';
+                }
+                
+                // Show success message
+                this.updateDebugInfo('Câmera ativada! Recarregando...', 'success');
+                
+                // Reload the page to initialize AR properly
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            })
+            .catch(error => {
+                console.error('❌ ARManager: Erro ao ativar câmera:', error.name, error.message);
+                
+                let message = 'Erro ao ativar câmera';
+                if (error.name === 'NotAllowedError') {
+                    message = 'Permissão de câmera negada';
+                } else if (error.name === 'NotFoundError') {
+                    message = 'Nenhuma câmera encontrada';
+                }
+                
+                this.updateDebugInfo(message, 'error');
+                alert(`${message}. Para usar o jogo AR, é necessário permitir o acesso à câmera.`);
+            });
+        } else {
+            alert('Seu navegador não suporta acesso à câmera.');
         }
     }
     

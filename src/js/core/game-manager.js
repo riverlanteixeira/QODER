@@ -272,11 +272,25 @@ class GameManager {
         const clueCount = this.gameState.collectedClues.length;
         const totalClues = Object.keys(this.clueTypes).length;
         
+        // Get current phase name
+        const phaseNames = {
+            'test': 'Teste AR Básico',
+            'welcome': 'Tela Inicial',
+            'ar-active': 'Investigação Ativa',
+            'crime-scene': 'Cena do Crime',
+            'witness1': 'Testemunha 1',
+            'witness2': 'Testemunha 2',
+            'camera': 'Câmera de Segurança',
+            'police-station': 'Delegacia'
+        };
+        
+        const phaseName = phaseNames[this.gameState.currentPhase] || this.gameState.currentPhase;
+        
         debugElement.innerHTML = `
-            <p>🎯 ETAPA 1 - Teste de AR Básico</p>
-            <p>📱 Aponte para o marcador HIRO</p>
+            <p>🎯 ETAPA 2 - Interface e Navegação</p>
+            <p>📱 ${phaseName}</p>
             <p>🔍 Pistas: ${clueCount}/${totalClues} | Pontos: ${this.gameState.score}</p>
-            <p>⏱️ Fase: ${this.gameState.currentPhase}</p>
+            <p>⏱️ Status: ${this.gameState.currentPhase}</p>
         `;
     }
     
