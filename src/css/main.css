@@ -329,13 +329,14 @@ body {
 
 /* ===== NAVIGATION BUTTONS ===== */
 .nav-buttons {
-    position: absolute;
-    bottom: 20px;
+    position: fixed;
+    bottom: max(20px, env(safe-area-inset-bottom, 20px));
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     gap: 10px;
     z-index: 250;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .nav-btn {
@@ -459,8 +460,8 @@ a-scene {
 
 /* ===== CAMERA BUTTON ===== */
 .camera-btn {
-    position: absolute;
-    bottom: 30px;
+    position: fixed;
+    bottom: max(30px, env(safe-area-inset-bottom, 30px));
     left: 50%;
     transform: translateX(-50%);
     background: linear-gradient(135deg, #ff6b00, #ff8500);
@@ -476,6 +477,7 @@ a-scene {
     display: flex;
     align-items: center;
     gap: 8px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .camera-btn:hover {
@@ -491,7 +493,7 @@ a-scene {
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
     .debug-info {
-        top: 10px;
+        top: max(10px, env(safe-area-inset-top, 10px));
         left: 10px;
         right: 10px;
         max-width: none;
@@ -511,6 +513,33 @@ a-scene {
     .camera-btn {
         padding: 12px 20px;
         font-size: 14px;
+        bottom: max(20px, env(safe-area-inset-bottom, 20px));
+    }
+    
+    .nav-buttons {
+        bottom: max(15px, env(safe-area-inset-bottom, 15px));
+    }
+    
+    .nav-btn {
+        padding: 8px 12px;
+        font-size: 13px;
+        min-width: 70px;
+    }
+    
+    /* Force full screen on mobile devices */
+    a-scene,
+    canvas.a-canvas,
+    video {
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+    }
+    
+    /* Hide browser UI on mobile */
+    body {
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
     }
 }
 
@@ -539,33 +568,45 @@ a-scene {
 a-scene {
     width: 100vw !important;
     height: 100vh !important;
+    height: 100dvh !important; /* Dynamic viewport height for mobile */
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     z-index: 1 !important;
+    overflow: hidden !important;
 }
 
 canvas.a-canvas {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     width: 100vw !important;
     height: 100vh !important;
+    height: 100dvh !important; /* Dynamic viewport height */
     z-index: 1 !important;
     object-fit: cover !important;
     object-position: center !important;
+    background: #000 !important; /* Fallback black background */
 }
 
 /* Force video element to fill screen */
 video {
     width: 100vw !important;
     height: 100vh !important;
+    height: 100dvh !important; /* Dynamic viewport height */
     object-fit: cover !important;
     object-position: center !important;
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     z-index: 0 !important;
+    background: #000 !important; /* Fallback black background */
 }
 
 /* Hide AR.js default UI elements */
@@ -617,6 +658,58 @@ a-marker {
 
 .toast-error {
     background: #ef4444;
+}
+
+/* ===== MOBILE VIEWPORT FIX ===== */
+/* Support for safe areas and eliminate black bars */
+html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh;
+    width: 100vw;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background: #000;
+}
+
+/* Zoom instructions positioning for safe areas */
+.zoom-instructions {
+    position: fixed;
+    top: max(50%, env(safe-area-inset-top, 0px) + 50px);
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 15px 25px;
+    border-radius: 25px;
+    color: white;
+    font-weight: 600;
+    font-size: 16px;
+    text-align: center;
+    z-index: 300;
+    max-width: 80%;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+/* Ensure UI elements respect safe areas */
+@supports (padding: max(0px)) {
+    .ui-overlay {
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        padding-left: env(safe-area-inset-left, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
+    }
 }
 
 /* ===== ZOOM INSTRUCTION STYLES ===== */

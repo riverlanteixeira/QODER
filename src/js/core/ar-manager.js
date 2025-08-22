@@ -965,16 +965,32 @@ class ARManager {
     forceFullScreenLayout() {
         console.log('📺 ARManager: Forçando layout full screen...');
         
+        // Get viewport dimensions including safe areas
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
         // Force canvas to fill screen
         const canvas = document.querySelector('canvas.a-canvas');
         if (canvas) {
             canvas.style.position = 'fixed';
             canvas.style.top = '0';
             canvas.style.left = '0';
+            canvas.style.right = '0';
+            canvas.style.bottom = '0';
             canvas.style.width = '100vw';
             canvas.style.height = '100vh';
+            canvas.style.maxWidth = '100vw';
+            canvas.style.maxHeight = '100vh';
             canvas.style.objectFit = 'cover';
+            canvas.style.objectPosition = 'center';
             canvas.style.zIndex = '1';
+            canvas.style.background = '#000';
+            
+            // Force canvas dimensions directly
+            if (canvas.width !== viewportWidth || canvas.height !== viewportHeight) {
+                console.log('🔧 ARManager: Ajustando dimensões do canvas:', viewportWidth, 'x', viewportHeight);
+            }
+            
             console.log('✅ ARManager: Canvas forçado para full screen');
         }
         
@@ -984,10 +1000,16 @@ class ARManager {
             video.style.position = 'fixed';
             video.style.top = '0';
             video.style.left = '0';
+            video.style.right = '0';
+            video.style.bottom = '0';
             video.style.width = '100vw';
             video.style.height = '100vh';
+            video.style.maxWidth = '100vw';
+            video.style.maxHeight = '100vh';
             video.style.objectFit = 'cover';
+            video.style.objectPosition = 'center';
             video.style.zIndex = '0';
+            video.style.background = '#000';
             console.log('✅ ARManager: Vídeo forçado para full screen');
         }
         
@@ -997,11 +1019,24 @@ class ARManager {
             scene.style.position = 'fixed';
             scene.style.top = '0';
             scene.style.left = '0';
+            scene.style.right = '0';
+            scene.style.bottom = '0';
             scene.style.width = '100vw';
             scene.style.height = '100vh';
+            scene.style.maxWidth = '100vw';
+            scene.style.maxHeight = '100vh';
             scene.style.zIndex = '1';
+            scene.style.overflow = 'hidden';
             console.log('✅ ARManager: A-Frame scene forçado para full screen');
         }
+        
+        // Force body and html to prevent scrolling/overflow issues
+        document.body.style.margin = '0';
+        document.body.style.padding = '0';
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.margin = '0';
+        document.documentElement.style.padding = '0';
+        document.documentElement.style.overflow = 'hidden';
     }
     
     // Monitor layout to prevent shrinking
@@ -1011,20 +1046,60 @@ class ARManager {
         setInterval(() => {
             const canvas = document.querySelector('canvas.a-canvas');
             const video = document.querySelector('video');
+            const scene = document.querySelector('a-scene');
             
+            let needsCorrection = false;
+            
+            // Check canvas dimensions
             if (canvas) {
                 const rect = canvas.getBoundingClientRect();
+                const expectedWidth = window.innerWidth;
+                const expectedHeight = window.innerHeight;
                 
-                // Check if canvas is smaller than expected (like 1/4 screen)
-                if (rect.width < window.innerWidth * 0.8 || rect.height < window.innerHeight * 0.8) {
-                    console.log('⚠️ ARManager: Layout reduzido detectado, corrigindo...');
-                    this.forceFullScreenLayout();
+                // Check if canvas is smaller than expected or has black bars
+                if (rect.width < expectedWidth * 0.9 || 
+                    rect.height < expectedHeight * 0.9 ||
+                    rect.left > 5 || rect.top > 5) {
                     
-                    // Show instruction to user
-                    this.showZoomInstruction('📺 Layout corrigido automaticamente', 'success');
+                    console.log('⚠️ ARManager: Layout problem detectado:', {
+                        canvasWidth: rect.width,
+                        canvasHeight: rect.height,
+                        canvasLeft: rect.left,
+                        canvasTop: rect.top,
+                        expectedWidth,
+                        expectedHeight
+                    });
+                    
+                    needsCorrection = true;
                 }
             }
-        }, 2000); // Check every 2 seconds
+            
+            // Check video dimensions
+            if (video) {
+                const videoRect = video.getBoundingClientRect();
+                if (videoRect.width < window.innerWidth * 0.9 || 
+                    videoRect.height < window.innerHeight * 0.9) {
+                    needsCorrection = true;
+                }
+            }
+            
+            // Check scene dimensions
+            if (scene) {
+                const sceneRect = scene.getBoundingClientRect();
+                if (sceneRect.width < window.innerWidth * 0.9 || 
+                    sceneRect.height < window.innerHeight * 0.9) {
+                    needsCorrection = true;
+                }
+            }
+            
+            if (needsCorrection) {
+                console.log('🔧 ARManager: Corrigindo layout...');
+                this.forceFullScreenLayout();
+                
+                // Show instruction to user
+                this.showZoomInstruction('📺 Layout corrigido automaticamente', 'success');
+            }
+        }, 1500); // Check every 1.5 seconds for faster response
     }
     
     // Check if AR is working properly even without finding video element
