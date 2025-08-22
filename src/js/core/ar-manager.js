@@ -731,7 +731,9 @@ class ARManager {
                         zoom: settings.zoom,
                         width: settings.width,
                         height: settings.height,
-                        focusMode: settings.focusMode
+                        focusMode: settings.focusMode,
+                        aspectRatio: settings.aspectRatio,
+                        frameRate: settings.frameRate
                     });
                     
                     if (capabilities) {
@@ -743,11 +745,43 @@ class ARManager {
                             const currentZoomPercent = ((settings.zoom - capabilities.zoom.min) / zoomRange) * 100;
                             
                             console.log(`📊 ARManager: Zoom atual: ${settings.zoom} (${currentZoomPercent.toFixed(1)}% do máximo)`);
+                            console.log(`🔍 ARManager: Zoom range: ${capabilities.zoom.min} - ${capabilities.zoom.max}`);
                             
-                            if (currentZoomPercent > 50) {
+                            // Even if zoom is at minimum, try to widen the field of view
+                            if (currentZoomPercent <= 50) {
+                                console.log('🎯 ARManager: Zoom OK, mas tentando melhorar campo de visão...');
+                                
+                                // Try to apply additional constraints for wider FOV
+                                const fovConstraints = {
+                                    width: { ideal: 640, max: 640 },
+                                    height: { ideal: 480, max: 480 },
+                                    zoom: capabilities.zoom.min,
+                                    aspectRatio: { ideal: 4/3 }
+                                };
+                                
+                                if (capabilities.focusDistance) {
+                                    fovConstraints.focusDistance = capabilities.focusDistance.max; // Focus far for wider view
+                                }
+                                
+                                videoTrack.applyConstraints({ advanced: [fovConstraints] })
+                                .then(() => {
+                                    console.log('✅ ARManager: Campo de visão otimizado');
+                                    this.showZoomInstruction('✅ Campo de visão otimizado para AR!', 'success');
+                                })
+                                .catch(error => {
+                                    console.log('⚠️ ARManager: Não foi possível otimizar FOV:', error);
+                                    console.log('❓ ARManager: Pode ser câmera teleobjetiva simulando wide-angle');
+                                    this.showZoomInstruction('📱 Imagem muito ampliada? Use dois dedos para diminuir zoom ou ⏳ aguarde...', 'warning');
+                                    
+                                    // If FOV optimization fails, might be wrong camera - try alternative after delay
+                                    setTimeout(() => {
+                                        this.tryAlternativeCamera();
+                                    }, 5000);
+                                });
+                            } else {
+                                // Zoom is too high, try to reduce it
                                 console.log('⚠️ ARManager: ZOOM ALTO DETECTADO! Tentando corrigir...');
                                 
-                                // Try to set zoom to minimum
                                 const minZoom = capabilities.zoom.min;
                                 const constraints = {
                                     advanced: [{ zoom: minZoom }]
@@ -762,9 +796,6 @@ class ARManager {
                                     console.log('❌ ARManager: Falha ao resetar zoom:', error);
                                     this.showZoomInstruction('📱 Use dois dedos para diminuir o zoom e detectar o marcador', 'warning');
                                 });
-                            } else {
-                                console.log('✅ ARManager: Zoom está em nível aceitável');
-                                this.showZoomInstruction('🎯 Aponte para o marcador HIRO para detectar o cubo', 'info');
                             }
                         } else {
                             console.log('❓ ARManager: Zoom capabilities não disponíveis');
@@ -820,6 +851,56 @@ class ARManager {
         }, 5000);
         
         console.log(`📱 ARManager: Instrução mostrada - ${message}`);
+    }
+    
+    // Add function to try forcing a different camera if current one seems to be telephoto
+    async tryAlternativeCamera() {
+        console.log('🔄 ARManager: Tentando câmera alternativa...');
+        
+        try {
+            // Get all video devices again
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            if (videoDevices.length > 1) {
+                console.log('📷 ARManager: Múltiplas câmeras detectadas, tentando alternativa...');
+                
+                // Try to get current deviceId
+                const video = document.querySelector('video');
+                let currentDeviceId = null;
+                
+                if (video && video.srcObject) {
+                    const track = video.srcObject.getVideoTracks()[0];
+                    if (track) {
+                        currentDeviceId = track.getSettings().deviceId;
+                    }
+                }
+                
+                // Find a different camera
+                const alternativeCamera = videoDevices.find(device => 
+                    device.deviceId !== currentDeviceId && 
+                    !device.label.toLowerCase().includes('front') &&
+                    !device.label.toLowerCase().includes('selfie')
+                );
+                
+                if (alternativeCamera) {
+                    console.log('🎯 ARManager: Câmera alternativa encontrada:', alternativeCamera.label);
+                    
+                    // Store preference and reload
+                    localStorage.setItem('qoder-preferred-camera', alternativeCamera.deviceId);
+                    
+                    this.showZoomInstruction('🔄 Tentando câmera alternativa...', 'info');
+                    
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    console.log('⚠️ ARManager: Nenhuma câmera alternativa encontrada');
+                }
+            }
+        } catch (error) {
+            console.error('❌ ARManager: Erro ao tentar câmera alternativa:', error);
+        }
     }
     
     // Utility methods
