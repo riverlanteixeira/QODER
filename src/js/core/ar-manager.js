@@ -10,6 +10,8 @@ class ARManager {
         this.isARReady = false;
         this.activeMarkers = new Set();
         this.loadedModels = new Map();
+        this.videoSearchAttempts = 0;
+        this.initTime = Date.now(); // Track initialization time for telephoto detection
         
         this.init();
     }
@@ -96,14 +98,12 @@ class ARManager {
             marker.addEventListener('markerFound', () => {
                 console.log(`🎯 Marcador encontrado: ${markerId}`);
                 this.onMarkerFound(markerId, marker);
-                this.activeMarkers.add(markerId);
             });
             
             // Marker lost
             marker.addEventListener('markerLost', () => {
                 console.log(`📱 Marcador perdido: ${markerId}`);
                 this.onMarkerLost(markerId, marker);
-                this.activeMarkers.delete(markerId);
             });
         });
     }
@@ -172,11 +172,18 @@ class ARManager {
             }
             
             if (!foundVideo) {
-                // Keep trying to find video element
-                console.log('🔍 ARManager: Tentando encontrar vídeo novamente em 3s...');
-                setTimeout(() => {
-                    this.checkARStatus();
-                }, 3000);
+                // Keep trying to find video element but limit attempts
+                const currentAttempts = this.videoSearchAttempts || 0;
+                if (currentAttempts < 3) {
+                    this.videoSearchAttempts = currentAttempts + 1;
+                    console.log(`🔍 ARManager: Tentando encontrar vídeo novamente em 3s... (tentativa ${this.videoSearchAttempts}/3)`);
+                    setTimeout(() => {
+                        this.checkARStatus();
+                    }, 3000);
+                } else {
+                    console.log('⚠️ ARManager: Limite de tentativas de busca por vídeo atingido');
+                    console.log('🎯 ARManager: AR pode estar funcionando mesmo sem encontrar vídeo element');
+                }
             }
         }
         
@@ -191,6 +198,11 @@ class ARManager {
     }
     
     onMarkerFound(markerId, markerElement) {
+        // Add to active markers set
+        this.activeMarkers.add(markerId);
+        console.log('🎓 ARManager: Marcador ativo adicionado:', markerId);
+        console.log('📈 ARManager: Total de marcadores ativos:', this.activeMarkers.size);
+        
         // Update debug info
         this.updateDebugInfo(`Marcador ${markerId} detectado!`, 'success');
         
@@ -204,6 +216,11 @@ class ARManager {
     }
     
     onMarkerLost(markerId, markerElement) {
+        // Remove from active markers set
+        this.activeMarkers.delete(markerId);
+        console.log('🗋 ARManager: Marcador ativo removido:', markerId);
+        console.log('📈 ARManager: Total de marcadores ativos:', this.activeMarkers.size);
+        
         // Update debug info
         this.updateDebugInfo(`Procurando marcadores...`, 'info');
         
@@ -642,8 +659,15 @@ class ARManager {
                             
                             if (isTelephoto) {
                                 console.warn('⚠️ ARManager: ATENÇÃO - Câmera TELEOBJETIVA detectada!');
-                                console.warn('🔄 ARManager: Tentando forçar câmera wide...');
-                                this.forceCameraSelection();
+                                
+                                // Check if AR is already working properly before switching cameras
+                                if (this.isARWorkingProperly()) {
+                                    console.log('✅ ARManager: AR já funcionando corretamente, mantendo câmera atual');
+                                    console.log('📱 ARManager: Usuário pode ajustar zoom manualmente se necessário');
+                                } else {
+                                    console.warn('🔄 ARManager: AR não está funcionando, tentando forçar câmera wide...');
+                                    this.forceCameraSelection();
+                                }
                             } else if (isMainWide) {
                                 console.log('✅ ARManager: Câmera GRANDE-ANGULAR confirmada!');
                             } else if (isUltrawide) {
@@ -807,12 +831,10 @@ class ARManager {
                                 .catch(error => {
                                     console.log('⚠️ ARManager: Não foi possível otimizar FOV:', error);
                                     console.log('❓ ARManager: Pode ser câmera teleobjetiva simulando wide-angle');
-                                    this.showZoomInstruction('📱 Imagem muito ampliada? Use dois dedos para diminuir zoom ou ⏳ aguarde...', 'warning');
+                                    this.showZoomInstruction('📱 Imagem muito ampliada? Use dois dedos para diminuir zoom', 'warning');
                                     
-                                    // If FOV optimization fails, might be wrong camera - try alternative after delay
-                                    setTimeout(() => {
-                                        this.tryAlternativeCamera();
-                                    }, 5000);
+                                    // Remove automatic camera switching - only suggest manual adjustment
+                                    // User can manually adjust zoom if needed
                                 });
                             } else {
                                 // Zoom is too high, try to reduce it
@@ -1003,6 +1025,36 @@ class ARManager {
                 }
             }
         }, 2000); // Check every 2 seconds
+    }
+    
+    // Check if AR is working properly even without finding video element
+    isARWorkingProperly() {
+        // Check if markers are being detected
+        if (this.activeMarkers.size > 0) {
+            console.log('✅ ARManager: AR funcionando - marcadores sendo detectados');
+            console.log('📈 ARManager: Marcadores ativos:', Array.from(this.activeMarkers));
+            return true;
+        }
+        
+        // Check if canvas is rendering and scene is active
+        const canvas = document.querySelector('canvas.a-canvas');
+        const scene = document.querySelector('a-scene');
+        
+        if (canvas && canvas.width > 0 && canvas.height > 0 && scene) {
+            // Additional check: has AR been running for at least 10 seconds?
+            // This prevents camera switching too early when AR is still initializing
+            const arRunTime = Date.now() - (this.initTime || Date.now());
+            if (arRunTime > 10000) { // 10 seconds
+                console.log('✅ ARManager: AR funcionando - canvas ativo e tempo suficiente');
+                return true;
+            } else {
+                console.log('⏳ ARManager: AR ainda inicializando, aguardando...', Math.round(arRunTime/1000), 'segundos');
+                return true; // Consider it working during initialization period
+            }
+        }
+        
+        console.log('⚠️ ARManager: AR não está funcionando adequadamente');
+        return false;
     }
     
     // Utility methods
