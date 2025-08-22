@@ -58,11 +58,13 @@ class ARManager {
             console.log('📱 ARManager: Cena A-Frame carregada');
             this.onSceneLoaded();
             
-            // Apply layout fixes after scene is ready
+            // Gentle layout check after scene loads
             setTimeout(() => {
-                this.forceFullScreenLayout();
-                this.fixARAlignment();
-            }, 1000);
+                const video = document.querySelector('video');
+                if (!video) {
+                    console.log('🔍 ARManager: Vídeo não encontrado após scene load, aguardando...');
+                }
+            }, 2000);
         });
         
         // AR ready
@@ -70,12 +72,16 @@ class ARManager {
             console.log('🎯 ARManager: AR.js pronto');
             this.isARReady = true;
             
-            // Apply layout corrections when AR is fully ready
+            // Simple verification after AR is ready
             setTimeout(() => {
-                this.forceFullScreenLayout();
-                this.fixARAlignment();
-                console.log('✅ ARManager: Correções de layout aplicadas após AR ready');
-            }, 500);
+                const video = document.querySelector('video');
+                if (video && video.videoWidth > 0) {
+                    console.log('✅ ARManager: Vídeo AR detectado após AR ready');
+                    this.ensureVideoVisibility();
+                } else {
+                    console.log('⚠️ ARManager: Vídeo ainda não detectado após AR ready');
+                }
+            }, 1000);
         });
         
         // Camera ready
@@ -187,15 +193,19 @@ class ARManager {
             if (!foundVideo) {
                 // Keep trying to find video element but limit attempts
                 const currentAttempts = this.videoSearchAttempts || 0;
-                if (currentAttempts < 3) {
+                if (currentAttempts < 5) { // Increased attempts
                     this.videoSearchAttempts = currentAttempts + 1;
-                    console.log(`🔍 ARManager: Tentando encontrar vídeo novamente em 3s... (tentativa ${this.videoSearchAttempts}/3)`);
+                    console.log(`🔍 ARManager: Tentando encontrar vídeo novamente em 5s... (tentativa ${this.videoSearchAttempts}/5)`);
+                    
                     setTimeout(() => {
                         this.checkARStatus();
-                    }, 3000);
+                    }, 5000); // Increased wait time
                 } else {
                     console.log('⚠️ ARManager: Limite de tentativas de busca por vídeo atingido');
-                    console.log('🎯 ARManager: AR pode estar funcionando mesmo sem encontrar vídeo element');
+                    console.log('🛠️ ARManager: Tentando reinicializar AR.js...');
+                    
+                    // Try to reinitialize AR system
+                    this.reinitializeAR();
                 }
             }
         }
@@ -1149,6 +1159,57 @@ class ARManager {
             }
         } else {
             console.log('⚠️ ARManager: Elemento de vídeo não encontrado');
+        }
+    }
+    
+    // Try to reinitialize AR system when video fails
+    async reinitializeAR() {
+        console.log('🛠️ ARManager: Reinicializando sistema AR...');
+        
+        try {
+            // Try to get camera stream manually
+            const constraints = {
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 480, max: 640 },
+                    height: { ideal: 640, max: 480 }
+                }
+            };
+            
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log('✅ ARManager: Stream da câmera obtido manualmente');
+            
+            // Create video element manually if AR.js failed
+            let video = document.querySelector('video');
+            if (!video) {
+                video = document.createElement('video');
+                video.autoplay = true;
+                video.muted = true;
+                video.playsInline = true;
+                video.style.position = 'fixed';
+                video.style.top = '0';
+                video.style.left = '0';
+                video.style.width = '100vw';
+                video.style.height = '100vh';
+                video.style.objectFit = 'cover';
+                video.style.zIndex = '1';
+                document.body.appendChild(video);
+                console.log('📹 ARManager: Elemento de vídeo criado manualmente');
+            }
+            
+            // Assign stream to video
+            video.srcObject = stream;
+            await video.play();
+            
+            console.log('✅ ARManager: Vídeo da câmera reproduzindo');
+            
+            // Force layout updates
+            this.forceFullScreenLayout();
+            this.ensureVideoVisibility();
+            
+        } catch (error) {
+            console.error('❌ ARManager: Erro ao reinicializar AR:', error);
+            this.showZoomInstruction('❌ Erro na câmera. Recarregue a página.', 'error');
         }
     }
     
