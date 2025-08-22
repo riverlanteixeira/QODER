@@ -274,43 +274,160 @@ class ARManager {
         console.log('🔍 ARManager: Buscando melhor câmera para AR...');
         
         try {
+            // Check if we have a preferred camera from previous telephoto detection
+            const preferredCameraId = localStorage.getItem('qoder-preferred-camera');
+            if (preferredCameraId) {
+                console.log('💾 ARManager: Câmera preferida encontrada no localStorage');
+                
+                // Verify the camera still exists
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                const preferredCamera = videoDevices.find(device => device.deviceId === preferredCameraId);
+                
+                if (preferredCamera) {
+                    console.log('🎯 ARManager: Usando câmera preferida:', preferredCamera.label);
+                    return {
+                        video: {
+                            deviceId: { exact: preferredCameraId },
+                            width: { ideal: 640, min: 480, max: 1280 },
+                            height: { ideal: 480, min: 360, max: 720 }
+                        }
+                    };
+                } else {
+                    console.log('⚠️ ARManager: Câmera preferida não encontrada, removendo do localStorage');
+                    localStorage.removeItem('qoder-preferred-camera');
+                }
+            }
+            
             // Get all video input devices
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoDevices = devices.filter(device => device.kind === 'videoinput');
             
             console.log('📱 ARManager: Câmeras encontradas:', videoDevices.length);
+            videoDevices.forEach((device, index) => {
+                console.log(`📷 Câmera ${index}:`, device.label || `Camera ${index}`, 
+                    '| DeviceId:', device.deviceId.substring(0, 12) + '...');
+            });
             
-            // Look for wide-angle camera (usually has "wide" in label or is the first back camera)
             let selectedDeviceId = null;
+            let selectedStrategy = 'default';
             
-            // Strategy 1: Look for camera with "wide" in the label
-            const wideCamera = videoDevices.find(device => 
-                device.label.toLowerCase().includes('wide') ||
-                device.label.toLowerCase().includes('main') ||
-                device.label.toLowerCase().includes('principal')
-            );
+            // Filter only back cameras first
+            const backCameras = videoDevices.filter(device => {
+                const label = device.label.toLowerCase();
+                return !label.includes('front') && 
+                       !label.includes('selfie') &&
+                       !label.includes('user') &&
+                       device.label.trim() !== ''; // Ensure we have a label
+            });
             
-            if (wideCamera) {
-                selectedDeviceId = wideCamera.deviceId;
-                console.log('🎯 ARManager: Câmera wide encontrada:', wideCamera.label);
-            } else {
-                // Strategy 2: For Samsung devices, usually the first rear camera is wide-angle
-                // Skip front cameras and telephoto (usually last in the list)
-                const backCameras = videoDevices.filter(device => 
-                    !device.label.toLowerCase().includes('front') &&
-                    !device.label.toLowerCase().includes('selfie') &&
-                    !device.label.toLowerCase().includes('telephoto') &&
-                    !device.label.toLowerCase().includes('tele') &&
-                    !device.label.toLowerCase().includes('zoom')
-                );
+            console.log('📱 ARManager: Câmeras traseiras encontradas:', backCameras.length);
+            backCameras.forEach((device, index) => {
+                console.log(`📷 Câmera traseira ${index}:`, device.label);
+            });
+            
+            // Strategy 1: Enhanced Samsung S20 FE detection
+            // Look for specific patterns that indicate telephoto vs wide
+            if (backCameras.length >= 2) {
+                // Try to identify telephoto cameras more aggressively
+                const telephotoIndicators = [
+                    'telephoto', 'tele', 'zoom', 'periscope',
+                    '3x', '5x', '10x', '2x', '64mp', '108mp'
+                ];
                 
-                if (backCameras.length > 0) {
-                    selectedDeviceId = backCameras[0].deviceId;
-                    console.log('🎯 ARManager: Primeira câmera traseira selecionada:', backCameras[0].label);
+                const ultraWideIndicators = [
+                    'ultrawide', 'ultra wide', 'ultra-wide', 'uw', '0.5x'
+                ];
+                
+                // Score each camera based on likelihood of being the main wide camera
+                const cameraScores = backCameras.map((device, index) => {
+                    const label = device.label.toLowerCase();
+                    let score = 100; // Base score
+                    
+                    // Penalize telephoto indicators heavily
+                    telephotoIndicators.forEach(indicator => {
+                        if (label.includes(indicator)) {
+                            score -= 50;
+                            console.log(`⬇️ Penalizando ${device.label} por '${indicator}': -50 pontos`);
+                        }
+                    });
+                    
+                    // Penalize ultrawide moderately  
+                    ultraWideIndicators.forEach(indicator => {
+                        if (label.includes(indicator)) {
+                            score -= 30;
+                            console.log(`⬇️ Penalizando ${device.label} por '${indicator}': -30 pontos`);
+                        }
+                    });
+                    
+                    // Bonus for main/wide/primary indicators
+                    if (label.includes('main') || label.includes('wide') || 
+                        label.includes('primary') || label.includes('principal')) {
+                        score += 20;
+                        console.log(`⬆️ Bonificando ${device.label} por palavra-chave principal: +20 pontos`);
+                    }
+                    
+                    // Samsung S20 FE specific: First camera is often wide
+                    if (index === 0 && backCameras.length >= 3) {
+                        score += 15;
+                        console.log(`⬆️ Bonificando ${device.label} por ser primeira câmera: +15 pontos`);
+                    }
+                    
+                    // Avoid last camera (often telephoto)
+                    if (index === backCameras.length - 1 && backCameras.length >= 3) {
+                        score -= 25;
+                        console.log(`⬇️ Penalizando ${device.label} por ser última câmera: -25 pontos`);
+                    }
+                    
+                    return { device, score, index };
+                });
+                
+                // Sort by score (highest first)
+                cameraScores.sort((a, b) => b.score - a.score);
+                
+                console.log('📊 ARManager: Pontuação das câmeras:');
+                cameraScores.forEach(({ device, score, index }) => {
+                    console.log(`📷 ${device.label}: ${score} pontos`);
+                });
+                
+                // Select camera with highest score
+                if (cameraScores[0] && cameraScores[0].score > 0) {
+                    selectedDeviceId = cameraScores[0].device.deviceId;
+                    selectedStrategy = 'enhanced-scoring';
+                    console.log('🎯 ARManager: Câmera selecionada por pontuação:', 
+                               cameraScores[0].device.label, 
+                               '(', cameraScores[0].score, 'pontos)');
                 }
             }
             
-            // Build constraints
+            // Strategy 2: Fallback - avoid obvious telephoto names
+            if (!selectedDeviceId && backCameras.length > 0) {
+                const nonTelephotoCamera = backCameras.find(device => {
+                    const label = device.label.toLowerCase();
+                    return !label.includes('telephoto') &&
+                           !label.includes('tele') &&
+                           !label.includes('zoom') &&
+                           !label.includes('3x') &&
+                           !label.includes('5x') &&
+                           !label.includes('64mp') &&
+                           !label.includes('108mp');
+                });
+                
+                if (nonTelephotoCamera) {
+                    selectedDeviceId = nonTelephotoCamera.deviceId;
+                    selectedStrategy = 'avoid-telephoto-keywords';
+                    console.log('🎯 ARManager: Câmera selecionada evitando telefoto:', nonTelephotoCamera.label);
+                }
+            }
+            
+            // Strategy 3: Force use first back camera if nothing else works
+            if (!selectedDeviceId && backCameras.length > 0) {
+                selectedDeviceId = backCameras[0].deviceId;
+                selectedStrategy = 'force-first-back';
+                console.log('🎯 ARManager: Forçando primeira câmera traseira:', backCameras[0].label);
+            }
+            
+            // Build constraints with aggressive camera forcing
             const constraints = {
                 video: {
                     width: { ideal: 640, min: 480, max: 1280 },
@@ -322,7 +439,12 @@ class ARManager {
             // Add specific device ID if found
             if (selectedDeviceId) {
                 constraints.video.deviceId = { exact: selectedDeviceId };
-                console.log('📷 ARManager: Usando deviceId específico para câmera wide');
+                // Remove facingMode when using specific deviceId to avoid conflicts
+                delete constraints.video.facingMode;
+                console.log(`📷 ARManager: Usando deviceId específico (${selectedStrategy})`);
+                console.log('🔧 ARManager: Removendo facingMode para evitar conflitos');
+            } else {
+                console.log('⚠️ ARManager: Nenhuma câmera específica encontrada, usando configuração padrão');
             }
             
             return constraints;
@@ -377,7 +499,7 @@ class ARManager {
             .then(stream => {
                 console.log('✅ ARManager: Câmera ativada pelo usuário');
                 
-                // Log camera info
+                // Log camera info with enhanced details
                 const videoTrack = stream.getVideoTracks()[0];
                 if (videoTrack) {
                     const settings = videoTrack.getSettings();
@@ -388,12 +510,40 @@ class ARManager {
                         deviceId: settings.deviceId
                     });
                     
-                    // Try to get device label
+                    // Try to get device label and determine camera type
                     navigator.mediaDevices.enumerateDevices()
                     .then(devices => {
                         const device = devices.find(d => d.deviceId === settings.deviceId);
                         if (device) {
                             console.log('🏷️ ARManager: Câmera selecionada:', device.label);
+                            
+                            // Analyze if this looks like telephoto or wide camera
+                            const label = device.label.toLowerCase();
+                            const isTelephoto = label.includes('telephoto') || 
+                                              label.includes('tele') || 
+                                              label.includes('zoom') ||
+                                              label.includes('3x') ||
+                                              label.includes('5x');
+                            
+                            const isUltrawide = label.includes('ultrawide') || 
+                                              label.includes('ultra wide') ||
+                                              label.includes('uw');
+                            
+                            const isMainWide = label.includes('main') || 
+                                             label.includes('wide') && !isUltrawide ||
+                                             label.includes('primary');
+                            
+                            if (isTelephoto) {
+                                console.warn('⚠️ ARManager: ATENÇÃO - Câmera TELEOBJETIVA detectada!');
+                                console.warn('🔄 ARManager: Tentando forçar câmera wide...');
+                                this.forceCameraSelection();
+                            } else if (isMainWide) {
+                                console.log('✅ ARManager: Câmera GRANDE-ANGULAR confirmada!');
+                            } else if (isUltrawide) {
+                                console.log('📷 ARManager: Câmera ultra-wide detectada (aceitável)');
+                            } else {
+                                console.log('🤔 ARManager: Tipo de câmera não identificado:', label);
+                            }
                         }
                     })
                     .catch(err => console.log('⚠️ ARManager: Não foi possível obter label da câmera'));
@@ -433,6 +583,54 @@ class ARManager {
             });
         } else {
             alert('Seu navegador não suporta acesso à câmera.');
+        }
+    }
+    
+    async forceCameraSelection() {
+        console.log('🔄 ARManager: Forçando seleção de câmera wide...');
+        
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            const backCameras = videoDevices.filter(device => {
+                const label = device.label.toLowerCase();
+                return !label.includes('front') && 
+                       !label.includes('selfie') &&
+                       !label.includes('user');
+            });
+            
+            // Find the best non-telephoto camera
+            const wideCamera = backCameras.find(device => {
+                const label = device.label.toLowerCase();
+                const isWide = (label.includes('main') || 
+                               (label.includes('wide') && !label.includes('ultra'))) &&
+                               !label.includes('telephoto') &&
+                               !label.includes('tele') &&
+                               !label.includes('zoom') &&
+                               !label.includes('3x');
+                return isWide;
+            });
+            
+            if (wideCamera) {
+                console.log('🎯 ARManager: Câmera wide encontrada para forçar:', wideCamera.label);
+                
+                // Show message to user
+                this.updateDebugInfo('Detectada câmera teleobjetiva. Recarregando com câmera wide...', 'warning');
+                
+                // Store the preferred camera in localStorage
+                localStorage.setItem('qoder-preferred-camera', wideCamera.deviceId);
+                
+                // Reload after delay
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            } else {
+                console.warn('⚠️ ARManager: Não foi possível encontrar câmera wide alternativa');
+            }
+            
+        } catch (error) {
+            console.error('❌ ARManager: Erro ao forçar seleção de câmera:', error);
         }
     }
     
