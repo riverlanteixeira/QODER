@@ -669,6 +669,8 @@ html {
     overflow: hidden;
     height: 100vh;
     height: 100dvh;
+    width: 100vw;
+    background: #000;
 }
 
 body {
@@ -682,6 +684,35 @@ body {
     top: 0;
     left: 0;
     background: #000;
+}
+
+/* Force AR elements to exact dimensions */
+* {
+    box-sizing: border-box;
+}
+
+/* Eliminate any possible spacing issues */
+a-scene {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    outline: none !important;
+}
+
+canvas.a-canvas {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    outline: none !important;
+    transform: none !important;
+}
+
+video {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    outline: none !important;
+    transform: none !important;
 }
 
 /* Zoom instructions positioning for safe areas */

@@ -57,12 +57,25 @@ class ARManager {
         this.scene.addEventListener('loaded', () => {
             console.log('📱 ARManager: Cena A-Frame carregada');
             this.onSceneLoaded();
+            
+            // Apply layout fixes after scene is ready
+            setTimeout(() => {
+                this.forceFullScreenLayout();
+                this.fixARAlignment();
+            }, 1000);
         });
         
         // AR ready
         this.scene.addEventListener('arjs-ready', () => {
             console.log('🎯 ARManager: AR.js pronto');
             this.isARReady = true;
+            
+            // Apply layout corrections when AR is fully ready
+            setTimeout(() => {
+                this.forceFullScreenLayout();
+                this.fixARAlignment();
+                console.log('✅ ARManager: Correções de layout aplicadas após AR ready');
+            }, 500);
         });
         
         // Camera ready
@@ -965,30 +978,52 @@ class ARManager {
     forceFullScreenLayout() {
         console.log('📺 ARManager: Forçando layout full screen...');
         
-        // Get viewport dimensions including safe areas
+        // Get exact viewport dimensions
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
+        const devicePixelRatio = window.devicePixelRatio || 1;
         
-        // Force canvas to fill screen
+        console.log('📏 ARManager: Dimensões do viewport:', {
+            width: viewportWidth,
+            height: viewportHeight,
+            devicePixelRatio
+        });
+        
+        // Force canvas to fill screen with exact dimensions
         const canvas = document.querySelector('canvas.a-canvas');
         if (canvas) {
+            // Set CSS styles
             canvas.style.position = 'fixed';
             canvas.style.top = '0';
             canvas.style.left = '0';
             canvas.style.right = '0';
             canvas.style.bottom = '0';
-            canvas.style.width = '100vw';
-            canvas.style.height = '100vh';
-            canvas.style.maxWidth = '100vw';
-            canvas.style.maxHeight = '100vh';
+            canvas.style.width = viewportWidth + 'px';
+            canvas.style.height = viewportHeight + 'px';
+            canvas.style.maxWidth = 'none';
+            canvas.style.maxHeight = 'none';
             canvas.style.objectFit = 'cover';
             canvas.style.objectPosition = 'center';
             canvas.style.zIndex = '2';
-            canvas.style.background = 'transparent'; // Transparent to show video
+            canvas.style.background = 'transparent';
             
-            // Force canvas dimensions directly
-            if (canvas.width !== viewportWidth || canvas.height !== viewportHeight) {
-                console.log('🔧 ARManager: Ajustando dimensões do canvas:', viewportWidth, 'x', viewportHeight);
+            // Force canvas internal dimensions to match viewport
+            const targetWidth = viewportWidth * devicePixelRatio;
+            const targetHeight = viewportHeight * devicePixelRatio;
+            
+            if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                console.log('🔧 ARManager: Canvas redimensionado:', targetWidth, 'x', targetHeight);
+                
+                // Force A-Frame renderer to update
+                const scene = document.querySelector('a-scene');
+                if (scene && scene.renderer) {
+                    scene.renderer.setSize(targetWidth, targetHeight, false);
+                    scene.camera.aspect = viewportWidth / viewportHeight;
+                    scene.camera.updateProjectionMatrix();
+                    console.log('✅ ARManager: Renderer A-Frame atualizado');
+                }
             }
             
             console.log('✅ ARManager: Canvas forçado para full screen');
@@ -1041,6 +1076,50 @@ class ARManager {
         
         // Ensure video is visible and playing
         this.ensureVideoVisibility();
+        
+        // Fix AR coordinate system alignment
+        this.fixARAlignment();
+    }
+    
+    // Fix AR coordinate system alignment with video
+    fixARAlignment() {
+        const scene = document.querySelector('a-scene');
+        const video = document.querySelector('video');
+        
+        if (scene && video && video.videoWidth > 0 && video.videoHeight > 0) {
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const videoWidth = video.videoWidth;
+            const videoHeight = video.videoHeight;
+            
+            console.log('🔧 ARManager: Corrigindo alinhamento AR:', {
+                viewport: `${viewportWidth}x${viewportHeight}`,
+                video: `${videoWidth}x${videoHeight}`
+            });
+            
+            // Calculate scale to fit video to viewport
+            const scaleX = viewportWidth / videoWidth;
+            const scaleY = viewportHeight / videoHeight;
+            const scale = Math.max(scaleX, scaleY); // Use max to fill completely
+            
+            // Update AR.js source parameters if available
+            const arjsSystem = scene.systems.arjs;
+            if (arjsSystem && arjsSystem.source) {
+                // Force AR.js to recalculate with correct dimensions
+                arjsSystem.source.domElement.width = viewportWidth;
+                arjsSystem.source.domElement.height = viewportHeight;
+                
+                console.log('✅ ARManager: AR.js source atualizado');
+            }
+            
+            // Force A-Frame camera to match viewport
+            const camera = scene.querySelector('#camera');
+            if (camera && scene.camera) {
+                scene.camera.aspect = viewportWidth / viewportHeight;
+                scene.camera.updateProjectionMatrix();
+                console.log('✅ ARManager: Câmera A-Frame atualizada');
+            }
+        }
     }
     
     // Ensure camera video is visible
@@ -1142,6 +1221,11 @@ class ARManager {
             if (needsCorrection) {
                 console.log('🔧 ARManager: Corrigindo layout...');
                 this.forceFullScreenLayout();
+                
+                // Also fix AR alignment
+                setTimeout(() => {
+                    this.fixARAlignment();
+                }, 100);
                 
                 // Show instruction to user
                 this.showZoomInstruction('📺 Layout corrigido automaticamente', 'success');
