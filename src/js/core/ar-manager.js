@@ -233,16 +233,11 @@ class ARManager {
             return;
         }
         
-        // Simplified camera constraints (compatible with Samsung S20 FE)
-        const cameraConstraints = {
-            video: {
-                facingMode: 'environment', // Use back camera
-                width: { ideal: 640, min: 480, max: 1280 },
-                height: { ideal: 480, min: 360, max: 720 }
-            }
-        };
-        
-        navigator.mediaDevices.getUserMedia(cameraConstraints)
+        // Try to get camera devices first to select the right one
+        this.selectBestCamera()
+        .then(selectedConstraints => {
+            return navigator.mediaDevices.getUserMedia(selectedConstraints);
+        })
         .then(stream => {
             console.log('✅ ARManager: Permissão de câmera concedida');
             
@@ -275,6 +270,77 @@ class ARManager {
         });
     }
     
+    async selectBestCamera() {
+        console.log('🔍 ARManager: Buscando melhor câmera para AR...');
+        
+        try {
+            // Get all video input devices
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            console.log('📱 ARManager: Câmeras encontradas:', videoDevices.length);
+            
+            // Look for wide-angle camera (usually has "wide" in label or is the first back camera)
+            let selectedDeviceId = null;
+            
+            // Strategy 1: Look for camera with "wide" in the label
+            const wideCamera = videoDevices.find(device => 
+                device.label.toLowerCase().includes('wide') ||
+                device.label.toLowerCase().includes('main') ||
+                device.label.toLowerCase().includes('principal')
+            );
+            
+            if (wideCamera) {
+                selectedDeviceId = wideCamera.deviceId;
+                console.log('🎯 ARManager: Câmera wide encontrada:', wideCamera.label);
+            } else {
+                // Strategy 2: For Samsung devices, usually the first rear camera is wide-angle
+                // Skip front cameras and telephoto (usually last in the list)
+                const backCameras = videoDevices.filter(device => 
+                    !device.label.toLowerCase().includes('front') &&
+                    !device.label.toLowerCase().includes('selfie') &&
+                    !device.label.toLowerCase().includes('telephoto') &&
+                    !device.label.toLowerCase().includes('tele') &&
+                    !device.label.toLowerCase().includes('zoom')
+                );
+                
+                if (backCameras.length > 0) {
+                    selectedDeviceId = backCameras[0].deviceId;
+                    console.log('🎯 ARManager: Primeira câmera traseira selecionada:', backCameras[0].label);
+                }
+            }
+            
+            // Build constraints
+            const constraints = {
+                video: {
+                    width: { ideal: 640, min: 480, max: 1280 },
+                    height: { ideal: 480, min: 360, max: 720 },
+                    facingMode: 'environment'
+                }
+            };
+            
+            // Add specific device ID if found
+            if (selectedDeviceId) {
+                constraints.video.deviceId = { exact: selectedDeviceId };
+                console.log('📷 ARManager: Usando deviceId específico para câmera wide');
+            }
+            
+            return constraints;
+            
+        } catch (error) {
+            console.warn('⚠️ ARManager: Erro ao enumerar câmeras, usando configuração padrão:', error);
+            
+            // Fallback to basic constraints
+            return {
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }
+            };
+        }
+    }
+    
     handleCameraError(error) {
         if (error.name === 'NotAllowedError') {
             console.log('🚫 ARManager: Permissão de câmera negada pelo usuário');
@@ -302,16 +368,12 @@ class ARManager {
         console.log('📷 ARManager: Solicitando permissão de câmera...');
         
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            // Simple constraints that work reliably on Samsung S20 FE
-            const cameraConstraints = {
-                video: {
-                    facingMode: 'environment',
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
-                }
-            };
-            
-            navigator.mediaDevices.getUserMedia(cameraConstraints)
+            // Use the same camera selection logic
+            this.selectBestCamera()
+            .then(selectedConstraints => {
+                console.log('🎯 ARManager: Configurações selecionadas:', selectedConstraints);
+                return navigator.mediaDevices.getUserMedia(selectedConstraints);
+            })
             .then(stream => {
                 console.log('✅ ARManager: Câmera ativada pelo usuário');
                 
@@ -322,8 +384,19 @@ class ARManager {
                     console.log('📸 ARManager: Configurações da câmera:', {
                         width: settings.width,
                         height: settings.height,
-                        facingMode: settings.facingMode
+                        facingMode: settings.facingMode,
+                        deviceId: settings.deviceId
                     });
+                    
+                    // Try to get device label
+                    navigator.mediaDevices.enumerateDevices()
+                    .then(devices => {
+                        const device = devices.find(d => d.deviceId === settings.deviceId);
+                        if (device) {
+                            console.log('🏷️ ARManager: Câmera selecionada:', device.label);
+                        }
+                    })
+                    .catch(err => console.log('⚠️ ARManager: Não foi possível obter label da câmera'));
                 }
                 
                 stream.getTracks().forEach(track => {
@@ -338,7 +411,7 @@ class ARManager {
                 }
                 
                 // Show success message
-                this.updateDebugInfo('Câmera ativada! Recarregando...', 'success');
+                this.updateDebugInfo('Câmera wide selecionada! Recarregando...', 'success');
                 
                 // Reload the page to initialize AR properly
                 setTimeout(() => {
