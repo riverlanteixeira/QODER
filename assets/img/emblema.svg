@@ -1,0 +1,20 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#1e3a8a" stroke="#3b82f6" stroke-width="4"/>
+  
+  <!-- Police badge shape -->
+  <polygon points="100,30 130,60 170,60 145,85 155,125 100,105 45,125 55,85 30,60 70,60" 
+           fill="#fbbf24" stroke="#f59e0b" stroke-width="2"/>
+  
+  <!-- Center circle -->
+  <circle cx="100" cy="85" r="25" fill="#1e3a8a" stroke="#fbbf24" stroke-width="2"/>
+  
+  <!-- Text -->
+  <text x="100" y="90" text-anchor="middle" fill="white" font-family="Arial" font-size="12" font-weight="bold">PC</text>
+  <text x="100" y="140" text-anchor="middle" fill="white" font-family="Arial" font-size="10">POLÍCIA CIVIL</text>
+  <text x="100" y="155" text-anchor="middle" fill="white" font-family="Arial" font-size="8">SANTA CATARINA</text>
+  
+  <!-- Decorative elements -->
+  <rect x="90" y="165" width="20" height="3" fill="#fbbf24"/>
+  <rect x="85" y="175" width="30" height="2" fill="#fbbf24"/>
+</svg>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QODER - Caça ao Ladrão da Joia</title>
+    
+    <!-- A-Frame and AR.js -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar-nft.js"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="src/css/main.css">
+    
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1e3a8a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="assets/img/emblema.svg">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <img src="assets/img/emblema.svg" alt="Polícia Civil SC" class="loading-logo">
+            <h2>Carregando Investigação...</h2>
+            <div class="loading-spinner"></div>
+        </div>
+    </div>
+    
+    <!-- Welcome Screen -->
+    <div id="welcome-screen" class="welcome-screen hidden">
+        <div class="welcome-content">
+            <img src="assets/img/emblema.svg" alt="Polícia Civil SC" class="welcome-logo">
+            <h1>Caça ao Ladrão da Joia</h1>
+            <p class="welcome-subtitle">Jogo Educativo de Investigação</p>
+            <div class="welcome-info">
+                <p>👮‍♀️ <strong>Polícia Civil de Santa Catarina</strong></p>
+                <p>🎯 Aprenda a investigar crimes</p>
+                <p>📱 Use seu celular como detetive</p>
+            </div>
+            <button id="start-investigation" class="start-btn">
+                🔍 Iniciar Investigação
+            </button>
+            <div class="welcome-instructions">
+                <p>📷 Permita acesso à câmera</p>
+                <p>🎯 Aponte para os marcadores AR</p>
+                <p>🔍 Colete pistas e deduza o culpado</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Main AR Scene -->
+    <a-scene 
+        embedded 
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        vr-mode-ui="enabled: false"
+        renderer="logarithmicDepthBuffer: true; colorManagement: true; sortObjects: true"
+        loading-screen="enabled: false">
+        
+        <!-- Assets -->
+        <a-assets>
+            <!-- Test Marker Pattern -->
+            <a-asset-item id="test-marker" src="assets/img/markers/test-marker.patt"></a-asset-item>
+        </a-assets>
+        
+        <!-- AR Camera -->
+        <a-camera
+            id="camera"
+            position="0 0 0"
+            look-controls="enabled: false"
+            arjs-camera>
+        </a-camera>
+        
+        <!-- Test Marker for Basic AR Testing -->
+        <a-marker 
+            preset="hiro" 
+            id="test-marker-hiro">
+            
+            <!-- Simple test cube -->
+            <a-box 
+                position="0 0.5 0" 
+                material="color: #ff6b00; opacity: 0.8" 
+                animation="property: rotation; to: 0 360 0; loop: true; dur: 10000"
+                scale="0.5 0.5 0.5">
+            </a-box>
+            
+            <!-- Test text -->
+            <a-text 
+                value="AR Funcionando!" 
+                position="0 1.5 0" 
+                align="center" 
+                color="white"
+                scale="2 2 2">
+            </a-text>
+            
+        </a-marker>
+        
+        <!-- Ambient Light -->
+        <a-light type="ambient" color="#ffffff" intensity="0.6"></a-light>
+        
+        <!-- Directional Light -->
+        <a-light type="directional" position="2 4 5" intensity="0.4"></a-light>
+        
+    </a-scene>
+    
+    <!-- UI Overlay -->
+    <div id="ui-overlay" class="ui-overlay hidden">
+        <!-- Header Bar -->
+        <div class="header-bar">
+            <div class="police-badge">
+                <img src="assets/img/emblema.svg" alt="PC" class="badge-icon">
+            </div>
+            <div class="game-title">
+                <span>Investigação AR</span>
+            </div>
+            <div class="inventory-btn" id="inventory-toggle">
+                🎒
+            </div>
+        </div>
+        
+        <!-- Progress Bar -->
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill"></div>
+            </div>
+            <span id="progress-text" class="progress-text">0/4 pistas</span>
+        </div>
+        
+        <!-- Debug Info -->
+        <div id="debug-info" class="debug-info">
+            <p>🎯 ETAPA 2 - Interface e Navegação</p>
+            <p>📱 Sistema de navegação ativo</p>
+            <p>🔍 Pistas: 0/4 | Pontos: 0</p>
+            <p>⏱️ Fase: welcome</p>
+        </div>
+        
+        <!-- Inventory Panel -->
+        <div id="inventory-panel" class="inventory-panel hidden">
+            <div class="inventory-header">
+                <h3>🎒 Inventário de Pistas</h3>
+                <button id="inventory-close" class="close-btn">×</button>
+            </div>
+            <div id="inventory-content" class="inventory-content">
+                <div class="no-clues">
+                    <p>🔍 Nenhuma pista coletada ainda</p>
+                    <p>Explore os marcadores AR para encontrar evidências!</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Camera Permission Button -->
+        <button id="enable-camera" class="camera-btn" style="display: none;">
+            📷 Ativar Câmera AR
+        </button>
+        
+        <!-- Navigation Buttons -->
+        <div class="nav-buttons hidden" id="nav-buttons">
+            <button id="back-to-menu" class="nav-btn secondary">
+                🏠 Menu
+            </button>
+            <button id="reset-game" class="nav-btn secondary">
+                🔄 Reiniciar
+            </button>
+        </div>
+    </div>
+    
+    <!-- JavaScript Modules -->
+    <script src="src/js/core/ar-manager.js"></script>
+    <script src="src/js/core/game-manager.js"></script>
+    <script src="src/js/ui/navigation.js"></script>
+    
+</body>
+</html>
