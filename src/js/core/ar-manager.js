@@ -58,13 +58,29 @@ class ARManager {
         this.scene.addEventListener('arjs-ready', () => {
             console.log('🎯 ARManager: AR.js pronto');
             this.isARReady = true;
-            this.hideLoadingScreen();
+            // Don't hide loading screen here, wait for camera
         });
         
         // Camera ready
         this.scene.addEventListener('camera-init', () => {
             console.log('📹 ARManager: Câmera inicializada');
         });
+        
+        // Video stream ready
+        this.scene.addEventListener('arjs-video-loaded', () => {
+            console.log('🎥 ARManager: Vídeo AR carregado');
+            this.hideLoadingScreen();
+        });
+        
+        // Add error handling
+        this.scene.addEventListener('error', (event) => {
+            console.error('❌ ARManager: Erro na cena:', event);
+        });
+        
+        // Monitor AR system status
+        setTimeout(() => {
+            this.checkARStatus();
+        }, 5000);
     }
     
     setupMarkerEvents() {
@@ -91,10 +107,45 @@ class ARManager {
     }
     
     onSceneLoaded() {
-        // Hide loading screen after a short delay
+        // Hide loading screen after a longer delay to ensure AR is ready
         setTimeout(() => {
-            this.hideLoadingScreen();
-        }, 2000);
+            console.log('⏰ ARManager: Timeout de inicialização - verificando status');
+            this.checkARStatus();
+        }, 3000);
+    }
+    
+    checkARStatus() {
+        console.log('🔍 ARManager: Verificando status do AR...');
+        
+        // Check if scene is visible
+        const canvas = this.scene.querySelector('canvas') || document.querySelector('canvas');
+        if (canvas) {
+            console.log('🖼️ ARManager: Canvas encontrado:', {
+                width: canvas.width,
+                height: canvas.height,
+                style: canvas.style.display
+            });
+        } else {
+            console.warn('⚠️ ARManager: Canvas não encontrado');
+        }
+        
+        // Check for video element
+        const video = document.querySelector('video');
+        if (video) {
+            console.log('📹 ARManager: Vídeo encontrado:', {
+                videoWidth: video.videoWidth,
+                videoHeight: video.videoHeight,
+                readyState: video.readyState
+            });
+        } else {
+            console.warn('⚠️ ARManager: Elemento de vídeo não encontrado');
+        }
+        
+        // Force hide loading screen if still visible
+        this.hideLoadingScreen();
+        
+        // Show debug message
+        this.updateDebugInfo('AR inicializado - aponte para marcador HIRO', 'info');
     }
     
     onMarkerFound(markerId, markerElement) {
@@ -182,48 +233,28 @@ class ARManager {
             return;
         }
         
-        // Configure camera constraints for wide-angle camera (avoid telephoto)
+        // Simplified camera constraints (compatible with Samsung S20 FE)
         const cameraConstraints = {
             video: {
                 facingMode: 'environment', // Use back camera
-                width: { ideal: 1280, max: 1920 },
-                height: { ideal: 720, max: 1080 },
-                // Force wide-angle camera selection
-                advanced: [{
-                    focusMode: 'continuous',
-                    zoom: { ideal: 1.0, max: 1.0 } // Prevent zoom/telephoto
-                }]
+                width: { ideal: 640, min: 480, max: 1280 },
+                height: { ideal: 480, min: 360, max: 720 }
             }
         };
         
-        // Try to get wide-angle camera first
         navigator.mediaDevices.getUserMedia(cameraConstraints)
         .then(stream => {
-            console.log('✅ ARManager: Permissão de câmera concedida (grande-angular)');
+            console.log('✅ ARManager: Permissão de câmera concedida');
             
             // Check camera capabilities
             const videoTrack = stream.getVideoTracks()[0];
             if (videoTrack) {
-                const capabilities = videoTrack.getCapabilities();
-                console.log('📸 ARManager: Capacidades da câmera:', {
-                    focusMode: capabilities.focusMode,
-                    zoom: capabilities.zoom,
-                    width: capabilities.width,
-                    height: capabilities.height
-                });
-                
-                // Apply optimal settings for AR
-                const constraints = {
-                    focusMode: 'continuous',
-                    zoom: 1.0 // Force minimum zoom
-                };
-                
-                videoTrack.applyConstraints(constraints)
-                .then(() => {
-                    console.log('🎯 ARManager: Configurações de câmera aplicadas para AR');
-                })
-                .catch(err => {
-                    console.warn('⚠️ ARManager: Não foi possível aplicar configurações:', err);
+                const settings = videoTrack.getSettings();
+                console.log('📸 ARManager: Configurações da câmera:', {
+                    width: settings.width,
+                    height: settings.height,
+                    facingMode: settings.facingMode,
+                    deviceId: settings.deviceId?.substring(0, 8) + '...'
                 });
             }
             
@@ -239,33 +270,8 @@ class ARManager {
             }, 1000);
         })
         .catch(error => {
-            console.warn('⚠️ ARManager: Erro com câmera grande-angular, tentando câmera padrão...');
-            
-            // Fallback to simpler constraints
-            const fallbackConstraints = {
-                video: {
-                    facingMode: 'environment',
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
-                }
-            };
-            
-            navigator.mediaDevices.getUserMedia(fallbackConstraints)
-            .then(stream => {
-                console.log('✅ ARManager: Permissão de câmera concedida (fallback)');
-                stream.getTracks().forEach(track => {
-                    track.stop();
-                    console.log(`📹 ARManager: Track ${track.kind} parado`);
-                });
-                
-                setTimeout(() => {
-                    this.hideLoadingScreen();
-                }, 1000);
-            })
-            .catch(fallbackError => {
-                console.warn('⚠️ ARManager: Erro ao acessar câmera:', fallbackError.name, fallbackError.message);
-                this.handleCameraError(fallbackError);
-            });
+            console.warn('⚠️ ARManager: Erro ao acessar câmera:', error.name, error.message);
+            this.handleCameraError(error);
         });
     }
     
@@ -296,24 +302,18 @@ class ARManager {
         console.log('📷 ARManager: Solicitando permissão de câmera...');
         
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            // Enhanced constraints for wide-angle camera
+            // Simple constraints that work reliably on Samsung S20 FE
             const cameraConstraints = {
                 video: {
-                    facingMode: 'environment', // Prefer back camera
-                    width: { ideal: 1280, max: 1920 },
-                    height: { ideal: 720, max: 1080 },
-                    // Try to avoid telephoto camera
-                    advanced: [{
-                        focusMode: 'continuous',
-                        zoom: { ideal: 1.0, max: 1.0 },
-                        torch: false
-                    }]
+                    facingMode: 'environment',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
                 }
             };
             
             navigator.mediaDevices.getUserMedia(cameraConstraints)
             .then(stream => {
-                console.log('✅ ARManager: Câmera ativada pelo usuário (grande-angular)');
+                console.log('✅ ARManager: Câmera ativada pelo usuário');
                 
                 // Log camera info
                 const videoTrack = stream.getVideoTracks()[0];
@@ -322,15 +322,7 @@ class ARManager {
                     console.log('📸 ARManager: Configurações da câmera:', {
                         width: settings.width,
                         height: settings.height,
-                        facingMode: settings.facingMode,
-                        deviceId: settings.deviceId
-                    });
-                    
-                    // Try to ensure minimum zoom
-                    videoTrack.applyConstraints({
-                        advanced: [{ zoom: 1.0 }]
-                    }).catch(err => {
-                        console.log('📷 ARManager: Zoom não suportado ou já no mínimo');
+                        facingMode: settings.facingMode
                     });
                 }
                 
@@ -346,7 +338,7 @@ class ARManager {
                 }
                 
                 // Show success message
-                this.updateDebugInfo('Câmera grande-angular ativada! Recarregando...', 'success');
+                this.updateDebugInfo('Câmera ativada! Recarregando...', 'success');
                 
                 // Reload the page to initialize AR properly
                 setTimeout(() => {
@@ -355,12 +347,6 @@ class ARManager {
             })
             .catch(error => {
                 console.error('❌ ARManager: Erro ao ativar câmera:', error.name, error.message);
-                
-                if (error.name === 'OverconstrainedError') {
-                    console.log('🔄 ARManager: Tentando câmera com configurações simplificadas...');
-                    this.tryFallbackCamera();
-                    return;
-                }
                 
                 let message = 'Erro ao ativar câmera';
                 if (error.name === 'NotAllowedError') {
@@ -375,35 +361,6 @@ class ARManager {
         } else {
             alert('Seu navegador não suporta acesso à câmera.');
         }
-    }
-    
-    tryFallbackCamera() {
-        console.log('🔄 ARManager: Tentando câmera com configurações simplificadas...');
-        
-        const fallbackConstraints = {
-            video: {
-                facingMode: 'environment',
-                width: { ideal: 640 },
-                height: { ideal: 480 }
-            }
-        };
-        
-        navigator.mediaDevices.getUserMedia(fallbackConstraints)
-        .then(stream => {
-            console.log('✅ ARManager: Câmera fallback ativada');
-            stream.getTracks().forEach(track => {
-                track.stop();
-                console.log(`📹 ARManager: Track ${track.kind} parado`);
-            });
-            
-            this.updateDebugInfo('Câmera ativada! Recarregando...', 'success');
-            setTimeout(() => location.reload(), 1500);
-        })
-        .catch(error => {
-            console.error('❌ ARManager: Falha no fallback da câmera:', error);
-            this.updateDebugInfo('Erro ao ativar câmera', 'error');
-            alert('Não foi possível ativar a câmera. Verifique as permissões.');
-        });
     }
     
     // Utility methods

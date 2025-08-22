@@ -53,6 +53,14 @@ class NavigationManager {
             this.showWelcomeScreen();
         }, 3000);
         
+        // Force welcome screen if AR fails to load
+        setTimeout(() => {
+            if (this.currentScreen === 'loading') {
+                console.log('⚠️ NavigationManager: Forçando tela de boas-vindas após timeout');
+                this.showWelcomeScreen();
+            }
+        }, 8000);
+        
         console.log('✅ NavigationManager: Configurado com sucesso');
     }
     
