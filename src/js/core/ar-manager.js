@@ -182,14 +182,51 @@ class ARManager {
             return;
         }
         
-        // Check for camera permission
-        navigator.mediaDevices.getUserMedia({ 
+        // Configure camera constraints for wide-angle camera (avoid telephoto)
+        const cameraConstraints = {
             video: {
-                facingMode: 'environment' // Use back camera for AR
+                facingMode: 'environment', // Use back camera
+                width: { ideal: 1280, max: 1920 },
+                height: { ideal: 720, max: 1080 },
+                // Force wide-angle camera selection
+                advanced: [{
+                    focusMode: 'continuous',
+                    zoom: { ideal: 1.0, max: 1.0 } // Prevent zoom/telephoto
+                }]
             }
-        })
+        };
+        
+        // Try to get wide-angle camera first
+        navigator.mediaDevices.getUserMedia(cameraConstraints)
         .then(stream => {
-            console.log('✅ ARManager: Permissão de câmera concedida');
+            console.log('✅ ARManager: Permissão de câmera concedida (grande-angular)');
+            
+            // Check camera capabilities
+            const videoTrack = stream.getVideoTracks()[0];
+            if (videoTrack) {
+                const capabilities = videoTrack.getCapabilities();
+                console.log('📸 ARManager: Capacidades da câmera:', {
+                    focusMode: capabilities.focusMode,
+                    zoom: capabilities.zoom,
+                    width: capabilities.width,
+                    height: capabilities.height
+                });
+                
+                // Apply optimal settings for AR
+                const constraints = {
+                    focusMode: 'continuous',
+                    zoom: 1.0 // Force minimum zoom
+                };
+                
+                videoTrack.applyConstraints(constraints)
+                .then(() => {
+                    console.log('🎯 ARManager: Configurações de câmera aplicadas para AR');
+                })
+                .catch(err => {
+                    console.warn('⚠️ ARManager: Não foi possível aplicar configurações:', err);
+                });
+            }
+            
             // Stop the stream as we just needed to check permissions
             stream.getTracks().forEach(track => {
                 track.stop();
@@ -202,19 +239,47 @@ class ARManager {
             }, 1000);
         })
         .catch(error => {
-            console.warn('⚠️ ARManager: Erro ao acessar câmera:', error.name, error.message);
+            console.warn('⚠️ ARManager: Erro com câmera grande-angular, tentando câmera padrão...');
             
-            if (error.name === 'NotAllowedError') {
-                console.log('🚫 ARManager: Permissão de câmera negada pelo usuário');
-                this.showCameraButton();
-            } else if (error.name === 'NotFoundError') {
-                console.log('📷 ARManager: Nenhuma câmera encontrada');
-                this.showCameraButton();
-            } else {
-                console.log('⚠️ ARManager: Erro desconhecido de câmera');
-                this.showCameraButton();
-            }
+            // Fallback to simpler constraints
+            const fallbackConstraints = {
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }
+            };
+            
+            navigator.mediaDevices.getUserMedia(fallbackConstraints)
+            .then(stream => {
+                console.log('✅ ARManager: Permissão de câmera concedida (fallback)');
+                stream.getTracks().forEach(track => {
+                    track.stop();
+                    console.log(`📹 ARManager: Track ${track.kind} parado`);
+                });
+                
+                setTimeout(() => {
+                    this.hideLoadingScreen();
+                }, 1000);
+            })
+            .catch(fallbackError => {
+                console.warn('⚠️ ARManager: Erro ao acessar câmera:', fallbackError.name, fallbackError.message);
+                this.handleCameraError(fallbackError);
+            });
         });
+    }
+    
+    handleCameraError(error) {
+        if (error.name === 'NotAllowedError') {
+            console.log('🚫 ARManager: Permissão de câmera negada pelo usuário');
+            this.showCameraButton();
+        } else if (error.name === 'NotFoundError') {
+            console.log('📷 ARManager: Nenhuma câmera encontrada');
+            this.showCameraButton();
+        } else {
+            console.log('⚠️ ARManager: Erro desconhecido de câmera');
+            this.showCameraButton();
+        }
     }
     
     showCameraButton() {
@@ -231,13 +296,44 @@ class ARManager {
         console.log('📷 ARManager: Solicitando permissão de câmera...');
         
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ 
+            // Enhanced constraints for wide-angle camera
+            const cameraConstraints = {
                 video: {
-                    facingMode: 'environment' // Prefer back camera
+                    facingMode: 'environment', // Prefer back camera
+                    width: { ideal: 1280, max: 1920 },
+                    height: { ideal: 720, max: 1080 },
+                    // Try to avoid telephoto camera
+                    advanced: [{
+                        focusMode: 'continuous',
+                        zoom: { ideal: 1.0, max: 1.0 },
+                        torch: false
+                    }]
                 }
-            })
+            };
+            
+            navigator.mediaDevices.getUserMedia(cameraConstraints)
             .then(stream => {
-                console.log('✅ ARManager: Câmera ativada pelo usuário');
+                console.log('✅ ARManager: Câmera ativada pelo usuário (grande-angular)');
+                
+                // Log camera info
+                const videoTrack = stream.getVideoTracks()[0];
+                if (videoTrack) {
+                    const settings = videoTrack.getSettings();
+                    console.log('📸 ARManager: Configurações da câmera:', {
+                        width: settings.width,
+                        height: settings.height,
+                        facingMode: settings.facingMode,
+                        deviceId: settings.deviceId
+                    });
+                    
+                    // Try to ensure minimum zoom
+                    videoTrack.applyConstraints({
+                        advanced: [{ zoom: 1.0 }]
+                    }).catch(err => {
+                        console.log('📷 ARManager: Zoom não suportado ou já no mínimo');
+                    });
+                }
+                
                 stream.getTracks().forEach(track => {
                     track.stop();
                     console.log(`📹 ARManager: Track ${track.kind} parado após ativação`);
@@ -250,7 +346,7 @@ class ARManager {
                 }
                 
                 // Show success message
-                this.updateDebugInfo('Câmera ativada! Recarregando...', 'success');
+                this.updateDebugInfo('Câmera grande-angular ativada! Recarregando...', 'success');
                 
                 // Reload the page to initialize AR properly
                 setTimeout(() => {
@@ -259,6 +355,12 @@ class ARManager {
             })
             .catch(error => {
                 console.error('❌ ARManager: Erro ao ativar câmera:', error.name, error.message);
+                
+                if (error.name === 'OverconstrainedError') {
+                    console.log('🔄 ARManager: Tentando câmera com configurações simplificadas...');
+                    this.tryFallbackCamera();
+                    return;
+                }
                 
                 let message = 'Erro ao ativar câmera';
                 if (error.name === 'NotAllowedError') {
@@ -273,6 +375,35 @@ class ARManager {
         } else {
             alert('Seu navegador não suporta acesso à câmera.');
         }
+    }
+    
+    tryFallbackCamera() {
+        console.log('🔄 ARManager: Tentando câmera com configurações simplificadas...');
+        
+        const fallbackConstraints = {
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            }
+        };
+        
+        navigator.mediaDevices.getUserMedia(fallbackConstraints)
+        .then(stream => {
+            console.log('✅ ARManager: Câmera fallback ativada');
+            stream.getTracks().forEach(track => {
+                track.stop();
+                console.log(`📹 ARManager: Track ${track.kind} parado`);
+            });
+            
+            this.updateDebugInfo('Câmera ativada! Recarregando...', 'success');
+            setTimeout(() => location.reload(), 1500);
+        })
+        .catch(error => {
+            console.error('❌ ARManager: Falha no fallback da câmera:', error);
+            this.updateDebugInfo('Erro ao ativar câmera', 'error');
+            alert('Não foi possível ativar a câmera. Verifique as permissões.');
+        });
     }
     
     // Utility methods
