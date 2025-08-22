@@ -58,7 +58,11 @@ class ARManager {
         this.scene.addEventListener('arjs-ready', () => {
             console.log('🎯 ARManager: AR.js pronto');
             this.isARReady = true;
-            // Don't hide loading screen here, wait for camera
+            
+            // Try to control zoom after AR.js initializes
+            setTimeout(() => {
+                this.attemptZoomControl();
+            }, 1000);
         });
         
         // Camera ready
@@ -175,15 +179,23 @@ class ARManager {
     }
     
     addMarkerFeedback(markerElement) {
-        // Add glow effect or animation to indicate marker detection
+        // Add simple scale effect without problematic easing
         const objects = markerElement.querySelectorAll('a-box, a-sphere, a-cylinder, a-gltf-model');
         objects.forEach(obj => {
-            obj.setAttribute('animation__scale', {
-                property: 'scale',
-                from: '0.8 0.8 0.8',
-                to: '1 1 1',
-                dur: 500,
-                easing: 'easeOutBounce'
+            // Use simple CSS-based animation instead of A-Frame animation
+            obj.setAttribute('scale', '0.8 0.8 0.8');
+            setTimeout(() => {
+                obj.setAttribute('scale', '1 1 1');
+            }, 100);
+            
+            // Add pulsing effect for better visibility
+            obj.setAttribute('animation__pulse', {
+                property: 'rotation',
+                from: '0 0 0',
+                to: '0 360 0',
+                dur: 3000,
+                easing: 'linear',
+                loop: true
             });
         });
     }
@@ -193,6 +205,7 @@ class ARManager {
         const objects = markerElement.querySelectorAll('a-box, a-sphere, a-cylinder, a-gltf-model');
         objects.forEach(obj => {
             obj.removeAttribute('animation__scale');
+            obj.removeAttribute('animation__pulse');
         });
     }
     
@@ -241,7 +254,7 @@ class ARManager {
         .then(stream => {
             console.log('✅ ARManager: Permissão de câmera concedida');
             
-            // Check camera capabilities
+            // Check camera capabilities and try to control zoom
             const videoTrack = stream.getVideoTracks()[0];
             if (videoTrack) {
                 const settings = videoTrack.getSettings();
@@ -251,6 +264,34 @@ class ARManager {
                     facingMode: settings.facingMode,
                     deviceId: settings.deviceId?.substring(0, 8) + '...'
                 });
+                
+                // Try to get capabilities and control zoom
+                const capabilities = videoTrack.getCapabilities();
+                if (capabilities) {
+                    console.log('🔧 ARManager: Capacidades da câmera:', {
+                        zoom: capabilities.zoom,
+                        focusMode: capabilities.focusMode,
+                        width: capabilities.width,
+                        height: capabilities.height
+                    });
+                    
+                    // Try to apply zoom constraints
+                    if (capabilities.zoom) {
+                        const constraints = {
+                            advanced: [{
+                                zoom: { min: capabilities.zoom.min, max: capabilities.zoom.min }
+                            }]
+                        };
+                        
+                        videoTrack.applyConstraints(constraints)
+                        .then(() => {
+                            console.log('✅ ARManager: Zoom mínimo aplicado com sucesso');
+                        })
+                        .catch(error => {
+                            console.log('⚠️ ARManager: Não foi possível aplicar zoom constraints:', error);
+                        });
+                    }
+                }
             }
             
             // Stop the stream as we just needed to check permissions
@@ -455,12 +496,18 @@ class ARManager {
                            anyBackCamera.label || 'Câmera sem rótulo');
             }
             
-            // Build constraints with aggressive camera forcing
+            // Build constraints with aggressive camera forcing and zoom control
             const constraints = {
                 video: {
                     width: { ideal: 640, min: 480, max: 1280 },
                     height: { ideal: 480, min: 360, max: 720 },
-                    facingMode: 'environment'
+                    facingMode: 'environment',
+                    // Zoom and focus controls to prevent telephoto behavior
+                    zoom: { ideal: 1.0, min: 1.0, max: 1.0 }, // Force minimum zoom
+                    focusMode: { ideal: 'continuous' },
+                    // Field of view controls
+                    aspectRatio: { ideal: 4/3 },
+                    frameRate: { ideal: 30, max: 30 }
                 }
             };
             
@@ -659,6 +706,57 @@ class ARManager {
             
         } catch (error) {
             console.error('❌ ARManager: Erro ao forçar seleção de câmera:', error);
+        }
+    }
+    
+    attemptZoomControl() {
+        console.log('🔍 ARManager: Tentando controlar zoom da câmera...');
+        
+        // Try to find video element created by AR.js
+        const video = document.querySelector('video');
+        if (video && video.srcObject) {
+            const stream = video.srcObject;
+            const videoTrack = stream.getVideoTracks()[0];
+            
+            if (videoTrack) {
+                const capabilities = videoTrack.getCapabilities();
+                const settings = videoTrack.getSettings();
+                
+                console.log('📹 ARManager: Settings atuais:', {
+                    zoom: settings.zoom,
+                    width: settings.width,
+                    height: settings.height
+                });
+                
+                if (capabilities && capabilities.zoom) {
+                    console.log('🔍 ARManager: Zoom capabilities:', capabilities.zoom);
+                    
+                    // Try to set zoom to minimum
+                    const minZoom = capabilities.zoom.min;
+                    const constraints = {
+                        advanced: [{ zoom: minZoom }]
+                    };
+                    
+                    videoTrack.applyConstraints(constraints)
+                    .then(() => {
+                        console.log('✅ ARManager: Zoom resetado para mínimo:', minZoom);
+                        
+                        // Update debug info
+                        this.updateDebugInfo('Zoom da câmera resetado para mínimo', 'success');
+                    })
+                    .catch(error => {
+                        console.log('⚠️ ARManager: Falha ao resetar zoom:', error);
+                        
+                        // Show user instruction about manual zoom
+                        this.updateDebugInfo('Use dois dedos para ajustar zoom manualmente', 'warning');
+                    });
+                } else {
+                    console.log('⚠️ ARManager: Zoom não suportado nesta câmera');
+                    this.updateDebugInfo('Use dois dedos na tela para ajustar zoom', 'info');
+                }
+            }
+        } else {
+            console.log('⚠️ ARManager: Vídeo element não encontrado');
         }
     }
     
